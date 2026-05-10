@@ -4,6 +4,7 @@ import {
   createPaperOrderIntent,
   exportAuditSnapshot,
   getAuditPersistenceStatus,
+  getBrokerAccount,
   getBrokerCapabilities,
   getBrokerStatus,
   getMarketDataCandles,
@@ -17,6 +18,7 @@ import {
   type AuditPersistenceStatus,
   type AuditSnapshot,
   type BacktestRun,
+  type BrokerAccountSnapshot,
   type BrokerCapabilities,
   type BrokerStatus,
   type MarketDataDatasetSummary,
@@ -59,6 +61,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [riskCheck, setRiskCheck] = useState<RiskCheckRun | null>(null);
   const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | null>(null);
   const [brokerCapabilities, setBrokerCapabilities] = useState<BrokerCapabilities | null>(null);
+  const [brokerAccount, setBrokerAccount] = useState<BrokerAccountSnapshot | null>(null);
   const [orderIntent, setOrderIntent] = useState<PaperOrderIntent | null>(null);
   const [orderIntentHistory, setOrderIntentHistory] = useState<PaperOrderIntent[]>([]);
   const [auditSnapshotJson, setAuditSnapshotJson] = useState('');
@@ -234,12 +237,14 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     setIsLoadingBrokerStatus(true);
 
     try {
-      const [statusSnapshot, capabilitiesSnapshot] = await Promise.all([
+      const [statusSnapshot, capabilitiesSnapshot, accountSnapshot] = await Promise.all([
         getBrokerStatus(),
         getBrokerCapabilities(),
+        getBrokerAccount(),
       ]);
       setBrokerStatus(statusSnapshot);
       setBrokerCapabilities(capabilitiesSnapshot);
+      setBrokerAccount(accountSnapshot);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load IBKR broker status');
     } finally {
@@ -554,6 +559,31 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                 <dt>Orders</dt>
                 <dd>
                   {brokerStatus.order_submission_enabled
+                    ? 'Order submission enabled'
+                    : 'Order submission disabled'}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
+
+          {brokerAccount ? (
+            <dl className="backtest-summary" aria-label="Broker account snapshot">
+              <div>
+                <dt>Account snapshot</dt>
+                <dd>{brokerAccount.account_id ?? 'Read-only empty until connected'}</dd>
+              </div>
+              <div>
+                <dt>Balances</dt>
+                <dd>{brokerAccount.balances.length} balances</dd>
+              </div>
+              <div>
+                <dt>Positions</dt>
+                <dd>{brokerAccount.positions.length} positions</dd>
+              </div>
+              <div>
+                <dt>Account orders</dt>
+                <dd>
+                  {brokerAccount.order_submission_enabled
                     ? 'Order submission enabled'
                     : 'Order submission disabled'}
                 </dd>

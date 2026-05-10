@@ -132,6 +132,17 @@ export type BrokerStatus = {
   message: string;
 };
 
+export type BrokerAccountSnapshot = {
+  provider: 'interactive_brokers';
+  mode: 'paper';
+  read_only: boolean;
+  order_submission_enabled: boolean;
+  account_id: string | null;
+  balances: Array<Record<string, string | number>>;
+  positions: Array<Record<string, string | number>>;
+  message: string;
+};
+
 export type BrokerCapabilities = {
   provider: 'interactive_brokers';
   current_execution_mode: 'audit_only';
@@ -325,6 +336,16 @@ export async function getBrokerStatus(): Promise<BrokerStatus> {
   }
 
   return response.json() as Promise<BrokerStatus>;
+}
+
+export async function getBrokerAccount(): Promise<BrokerAccountSnapshot> {
+  const response = await fetch('/api/broker/account');
+
+  if (!response.ok) {
+    throw new Error('Failed to load IBKR account snapshot');
+  }
+
+  return response.json() as Promise<BrokerAccountSnapshot>;
 }
 
 export async function getBrokerCapabilities(): Promise<BrokerCapabilities> {

@@ -167,6 +167,17 @@ const brokerCapabilities = {
   message: 'Current broker mode records audit-only paper order intents; no IBKR orders are submitted.',
 };
 
+const brokerAccount = {
+  provider: 'interactive_brokers',
+  mode: 'paper',
+  read_only: true,
+  order_submission_enabled: false,
+  account_id: null,
+  balances: [],
+  positions: [],
+  message: 'IBKR account snapshot is read-only and empty until a broker session is connected.',
+};
+
 const createdOrderIntent = {
   id: 1,
   strategy_id: 1,
@@ -278,7 +289,7 @@ describe('App', () => {
     });
     expect(await screen.findByText(/restored 1 saved transcript/i)).toBeInTheDocument();
     expect(screen.getByText(/selected transcript/i)).toBeInTheDocument();
-    expect(screen.getByText(/opening range breakout with volume/i)).toBeInTheDocument();
+    expect(await screen.findByText(/opening range breakout with volume/i)).toBeInTheDocument();
     expect(screen.getByText(/approved by garratt/i)).toBeInTheDocument();
   });
 
@@ -429,7 +440,7 @@ describe('App', () => {
     expect(screen.getAllByText(/interactive brokers/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/paper mode/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/read-only/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/order submission disabled/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);
   });
 
   it('renders broker execution capability boundaries', async () => {
@@ -447,6 +458,23 @@ describe('App', () => {
     expect(screen.getByText(/paper broker submission disabled/i)).toBeInTheDocument();
     expect(screen.getByText(/live broker submission disabled/i)).toBeInTheDocument();
     expect(screen.getByText(/no IBKR orders are submitted/i)).toBeInTheDocument();
+  });
+
+  it('renders the read-only IBKR account snapshot separately from order submission', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/account');
+    });
+    expect(await screen.findByText(/account snapshot/i)).toBeInTheDocument();
+    expect(screen.getByText(/read-only empty until connected/i)).toBeInTheDocument();
+    expect(screen.getByText(/0 balances/i)).toBeInTheDocument();
+    expect(screen.getByText(/0 positions/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);
   });
 
   it('runs a paper-mode risk check after approval and backtest', async () => {
@@ -739,6 +767,13 @@ function mockTradingApi() {
 
     if (url === '/api/broker/capabilities') {
       return new Response(JSON.stringify(brokerCapabilities), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/broker/account') {
+      return new Response(JSON.stringify(brokerAccount), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });

@@ -1,5 +1,7 @@
 import './styles.css';
 
+import { TranscriptForm } from './components/TranscriptForm';
+
 export function App() {
   return (
     <main className="app-shell">
@@ -12,6 +14,8 @@ export function App() {
           risk controls.
         </p>
       </section>
+
+      <TranscriptForm />
 
       <section className="dashboard-grid" aria-label="Dashboard sections">
         <article>

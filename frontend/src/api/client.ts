@@ -186,6 +186,26 @@ export type AuditImportSummary = {
   message: string;
 };
 
+export async function getTranscripts(): Promise<Transcript[]> {
+  const response = await fetch('/api/transcripts');
+
+  if (!response.ok) {
+    throw new Error('Failed to load saved transcripts');
+  }
+
+  return response.json() as Promise<Transcript[]>;
+}
+
+export async function getStrategies(): Promise<StrategyCandidate[]> {
+  const response = await fetch('/api/strategies');
+
+  if (!response.ok) {
+    throw new Error('Failed to load strategy candidates');
+  }
+
+  return response.json() as Promise<StrategyCandidate[]>;
+}
+
 export async function createTranscript(payload: TranscriptPayload): Promise<Transcript> {
   const response = await fetch('/api/transcripts', {
     method: 'POST',

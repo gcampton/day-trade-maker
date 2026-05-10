@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   approveStrategy,
@@ -9,14 +9,23 @@ import {
 
 type StrategyExtractionPanelProps = {
   transcript: Transcript | null;
+  initialCandidates?: StrategyCandidate[];
   onCandidateSelected?: (candidate: StrategyCandidate) => void;
 };
 
-export function StrategyExtractionPanel({ transcript, onCandidateSelected }: StrategyExtractionPanelProps) {
-  const [candidates, setCandidates] = useState<StrategyCandidate[]>([]);
+export function StrategyExtractionPanel({
+  transcript,
+  initialCandidates = [],
+  onCandidateSelected,
+}: StrategyExtractionPanelProps) {
+  const [candidates, setCandidates] = useState<StrategyCandidate[]>(initialCandidates);
   const [error, setError] = useState<string | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [approvingStrategyId, setApprovingStrategyId] = useState<number | null>(null);
+
+  useEffect(() => {
+    setCandidates(initialCandidates);
+  }, [initialCandidates]);
 
   async function handleExtract() {
     if (!transcript) {

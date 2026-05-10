@@ -222,13 +222,48 @@ describe('App', () => {
     expect(screen.getByText(/youtube transcript strategy lab/i)).toBeInTheDocument();
   });
 
+  it('loads persisted transcripts and strategy candidates on startup', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/transcripts') {
+        return new Response(JSON.stringify([savedTranscript]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url === '/api/strategies') {
+        return new Response(JSON.stringify([approvedStrategy]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/transcripts');
+      expect(fetchMock).toHaveBeenCalledWith('/api/strategies');
+    });
+    expect(await screen.findByText(/restored 1 saved transcript/i)).toBeInTheDocument();
+    expect(screen.getByText(/selected transcript/i)).toBeInTheDocument();
+    expect(screen.getByText(/opening range breakout with volume/i)).toBeInTheDocument();
+    expect(screen.getByText(/approved by garratt/i)).toBeInTheDocument();
+  });
+
   it('submits a pasted transcript to the backend', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify(savedTranscript), {
-        status: 201,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      if (url === '/api/transcripts' && init?.method === 'POST') {
+        return new Response(JSON.stringify(savedTranscript), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(null, { status: 404 });
+    });
 
     render(<App />);
 
@@ -236,7 +271,9 @@ describe('App', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/transcripts', expect.any(Object)));
 
-    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    const request = fetchMock.mock.calls.find(
+      ([url, init]) => url === '/api/transcripts' && init?.method === 'POST',
+    )?.[1] as RequestInit;
     expect(request.method).toBe('POST');
     expect(JSON.parse(request.body as string)).toMatchObject({
       title: 'Opening Range Breakout',

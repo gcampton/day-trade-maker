@@ -1,15 +1,49 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import './styles.css';
 
 import { StrategyExtractionPanel } from './components/StrategyExtractionPanel';
 import { TranscriptForm } from './components/TranscriptForm';
 import type { StrategyCandidate, Transcript } from './api/client';
+import { getStrategies, getTranscripts } from './api/client';
 import { ChartsPage } from './pages/ChartsPage';
 
 export function App() {
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyCandidate | null>(null);
+  const [restoredTranscriptCount, setRestoredTranscriptCount] = useState(0);
+  const [restoredStrategies, setRestoredStrategies] = useState<StrategyCandidate[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function restoreResearchState() {
+      try {
+        const [transcripts, strategies] = await Promise.all([getTranscripts(), getStrategies()]);
+        if (!isMounted) {
+          return;
+        }
+
+        if (Array.isArray(transcripts) && transcripts.length > 0) {
+          setSelectedTranscript(transcripts[0]);
+          setRestoredTranscriptCount(transcripts.length);
+        }
+
+        if (Array.isArray(strategies) && strategies.length > 0) {
+          setRestoredStrategies(strategies);
+          setSelectedStrategy(strategies[0]);
+        }
+      } catch {
+        // Startup restore is best-effort so local development and tests can run before the API is up.
+      }
+    }
+
+    void restoreResearchState();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <main className="app-shell">
@@ -27,9 +61,14 @@ export function App() {
         <TranscriptForm onSaved={setSelectedTranscript} />
         <StrategyExtractionPanel
           transcript={selectedTranscript}
+          initialCandidates={restoredStrategies}
           onCandidateSelected={setSelectedStrategy}
         />
       </div>
+
+      {restoredTranscriptCount > 0 ? (
+        <p className="success">Restored {restoredTranscriptCount} saved transcript</p>
+      ) : null}
 
       <ChartsPage selectedStrategy={selectedStrategy} />
 

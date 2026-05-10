@@ -4,7 +4,9 @@ from datetime import UTC, datetime
 
 from day_trade_maker.backtest import BacktestResult
 from day_trade_maker.market_data import Candle
+from day_trade_maker.persistence import SQLiteAuditSnapshotRepository
 from day_trade_maker.schemas import (
+    AuditSnapshot,
     BacktestRun,
     MarketDataDataset,
     PaperOrderIntent,
@@ -18,14 +20,15 @@ from day_trade_maker.strategy_spec import StrategySpec
 
 
 class TranscriptStore:
-    def __init__(self) -> None:
-        self._transcripts: list[Transcript] = []
-        self._next_id = 1
+    def __init__(self, transcripts: list[Transcript] | None = None) -> None:
+        self._transcripts: list[Transcript] = list(transcripts or [])
+        self._next_id = next_id(self._transcripts)
 
     def create(self, transcript: TranscriptCreate) -> Transcript:
         saved = Transcript(id=self._next_id, **transcript.model_dump())
         self._next_id += 1
         self._transcripts.append(saved)
+        persist_all()
         return saved
 
     def get(self, transcript_id: int) -> Transcript | None:
@@ -40,17 +43,19 @@ class TranscriptStore:
     def replace_all(self, transcripts: list[Transcript]) -> None:
         self._transcripts = list(transcripts)
         self._next_id = next_id(transcripts)
+        persist_all()
 
 
 class StrategyCandidateStore:
-    def __init__(self) -> None:
-        self._strategies: list[StrategyCandidate] = []
-        self._next_id = 1
+    def __init__(self, strategies: list[StrategyCandidate] | None = None) -> None:
+        self._strategies: list[StrategyCandidate] = list(strategies or [])
+        self._next_id = next_id(self._strategies)
 
     def create(self, transcript_id: int, spec: StrategySpec) -> StrategyCandidate:
         saved = StrategyCandidate(id=self._next_id, transcript_id=transcript_id, spec=spec)
         self._next_id += 1
         self._strategies.append(saved)
+        persist_all()
         return saved
 
     def list(self) -> list[StrategyCandidate]:
@@ -75,17 +80,19 @@ class StrategyCandidateStore:
         self._strategies = [
             approved if item.id == strategy_id else item for item in self._strategies
         ]
+        persist_all()
         return approved
 
     def replace_all(self, strategies: list[StrategyCandidate]) -> None:
         self._strategies = list(strategies)
         self._next_id = next_id(strategies)
+        persist_all()
 
 
 class MarketDataStore:
-    def __init__(self) -> None:
-        self._datasets: list[MarketDataDataset] = []
-        self._next_id = 1
+    def __init__(self, datasets: list[MarketDataDataset] | None = None) -> None:
+        self._datasets: list[MarketDataDataset] = list(datasets or [])
+        self._next_id = next_id(self._datasets)
 
     def create(self, symbol: str, timeframe: str, candles: list[Candle]) -> MarketDataDataset:
         saved = MarketDataDataset(
@@ -96,6 +103,7 @@ class MarketDataStore:
         )
         self._next_id += 1
         self._datasets.append(saved)
+        persist_all()
         return saved
 
     def get(self, dataset_id: int) -> MarketDataDataset | None:
@@ -107,12 +115,13 @@ class MarketDataStore:
     def replace_all(self, datasets: list[MarketDataDataset]) -> None:
         self._datasets = list(datasets)
         self._next_id = next_id(datasets)
+        persist_all()
 
 
 class BacktestStore:
-    def __init__(self) -> None:
-        self._backtests: list[BacktestRun] = []
-        self._next_id = 1
+    def __init__(self, backtests: list[BacktestRun] | None = None) -> None:
+        self._backtests: list[BacktestRun] = list(backtests or [])
+        self._next_id = next_id(self._backtests)
 
     def create(self, strategy_id: int, dataset_id: int, result: BacktestResult) -> BacktestRun:
         saved = BacktestRun(
@@ -123,6 +132,7 @@ class BacktestStore:
         )
         self._next_id += 1
         self._backtests.append(saved)
+        persist_all()
         return saved
 
     def get(self, backtest_id: int) -> BacktestRun | None:
@@ -134,12 +144,13 @@ class BacktestStore:
     def replace_all(self, backtests: list[BacktestRun]) -> None:
         self._backtests = list(backtests)
         self._next_id = next_id(backtests)
+        persist_all()
 
 
 class RiskCheckStore:
-    def __init__(self) -> None:
-        self._risk_checks: list[RiskCheckRun] = []
-        self._next_id = 1
+    def __init__(self, risk_checks: list[RiskCheckRun] | None = None) -> None:
+        self._risk_checks: list[RiskCheckRun] = list(risk_checks or [])
+        self._next_id = next_id(self._risk_checks)
 
     def create(
         self,
@@ -162,6 +173,7 @@ class RiskCheckStore:
         )
         self._next_id += 1
         self._risk_checks.append(saved)
+        persist_all()
         return saved
 
     def get(self, risk_check_id: int) -> RiskCheckRun | None:
@@ -176,12 +188,13 @@ class RiskCheckStore:
     def replace_all(self, risk_checks: list[RiskCheckRun]) -> None:
         self._risk_checks = list(risk_checks)
         self._next_id = next_id(risk_checks)
+        persist_all()
 
 
 class PaperOrderIntentStore:
-    def __init__(self) -> None:
-        self._order_intents: list[PaperOrderIntent] = []
-        self._next_id = 1
+    def __init__(self, order_intents: list[PaperOrderIntent] | None = None) -> None:
+        self._order_intents: list[PaperOrderIntent] = list(order_intents or [])
+        self._next_id = next_id(self._order_intents)
 
     def create(self, payload: PaperOrderIntentCreate, checks: list[str]) -> PaperOrderIntent:
         saved = PaperOrderIntent(
@@ -192,6 +205,7 @@ class PaperOrderIntentStore:
         )
         self._next_id += 1
         self._order_intents.append(saved)
+        persist_all()
         return saved
 
     def list(self) -> list[PaperOrderIntent]:
@@ -200,15 +214,35 @@ class PaperOrderIntentStore:
     def replace_all(self, order_intents: list[PaperOrderIntent]) -> None:
         self._order_intents = list(order_intents)
         self._next_id = next_id(order_intents)
+        persist_all()
 
 
 def next_id(items: list[object]) -> int:
     return max((item.id for item in items), default=0) + 1
 
 
-transcript_store = TranscriptStore()
-strategy_candidate_store = StrategyCandidateStore()
-market_data_store = MarketDataStore()
-backtest_store = BacktestStore()
-risk_check_store = RiskCheckStore()
-paper_order_intent_store = PaperOrderIntentStore()
+audit_snapshot_repository = SQLiteAuditSnapshotRepository()
+_initial_snapshot = audit_snapshot_repository.load()
+
+transcript_store = TranscriptStore(_initial_snapshot.transcripts)
+strategy_candidate_store = StrategyCandidateStore(_initial_snapshot.strategies)
+market_data_store = MarketDataStore(_initial_snapshot.market_data)
+backtest_store = BacktestStore(_initial_snapshot.backtests)
+risk_check_store = RiskCheckStore(_initial_snapshot.risk_checks)
+paper_order_intent_store = PaperOrderIntentStore(_initial_snapshot.paper_order_intents)
+
+
+def current_snapshot() -> AuditSnapshot:
+    return AuditSnapshot(
+        transcripts=transcript_store.list(),
+        strategies=strategy_candidate_store.list(),
+        market_data=market_data_store.list(),
+        backtests=backtest_store.list(),
+        risk_checks=risk_check_store.list(),
+        paper_order_intents=paper_order_intent_store.list(),
+    )
+
+
+def persist_all() -> None:
+    if "audit_snapshot_repository" in globals():
+        audit_snapshot_repository.save(current_snapshot())

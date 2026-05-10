@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from day_trade_maker.schemas import (
     BrokerAccountSnapshot,
+    BrokerCapabilities,
     BrokerStatus,
     PaperOrderIntent,
     PaperOrderIntentCreate,
@@ -18,6 +19,16 @@ router = APIRouter(prefix="/api/broker", tags=["broker"])
 @router.get("/order-intents", response_model=list[PaperOrderIntent])
 def list_paper_order_intents() -> list[PaperOrderIntent]:
     return paper_order_intent_store.list()
+
+
+@router.get("/capabilities", response_model=BrokerCapabilities)
+def get_broker_capabilities() -> BrokerCapabilities:
+    return BrokerCapabilities(
+        message=(
+            "Current broker mode records audit-only paper order intents; "
+            "no IBKR orders are submitted."
+        )
+    )
 
 
 @router.get("/status", response_model=BrokerStatus)

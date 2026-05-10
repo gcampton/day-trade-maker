@@ -36,3 +36,21 @@ def test_get_broker_account_returns_read_only_empty_account_snapshot() -> None:
     assert body["positions"] == []
     assert body["balances"] == []
     assert body["order_submission_enabled"] is False
+
+
+def test_get_broker_capabilities_separates_audit_intents_from_future_execution() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/broker/capabilities")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "interactive_brokers"
+    assert body["current_execution_mode"] == "audit_only"
+    assert body["supports_order_intents"] is True
+    assert body["supports_paper_broker_submission"] is False
+    assert body["supports_live_broker_submission"] is False
+    assert body["order_submission_enabled"] is False
+    assert body["message"] == (
+        "Current broker mode records audit-only paper order intents; no IBKR orders are submitted."
+    )

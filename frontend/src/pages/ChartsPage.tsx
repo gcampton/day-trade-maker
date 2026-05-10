@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 
 import {
   createPaperOrderIntent,
+  getBrokerCapabilities,
   getBrokerStatus,
   getMarketDataCandles,
   getPaperOrderIntents,
@@ -9,6 +10,7 @@ import {
   runBacktest,
   runRiskCheck,
   type BacktestRun,
+  type BrokerCapabilities,
   type BrokerStatus,
   type MarketDataDatasetSummary,
   type PaperOrderIntent,
@@ -49,6 +51,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [backtestRun, setBacktestRun] = useState<BacktestRun | null>(null);
   const [riskCheck, setRiskCheck] = useState<RiskCheckRun | null>(null);
   const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | null>(null);
+  const [brokerCapabilities, setBrokerCapabilities] = useState<BrokerCapabilities | null>(null);
   const [orderIntent, setOrderIntent] = useState<PaperOrderIntent | null>(null);
   const [orderIntentHistory, setOrderIntentHistory] = useState<PaperOrderIntent[]>([]);
   const [orderSymbol, setOrderSymbol] = useState('AAPL');
@@ -142,7 +145,12 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     setIsLoadingBrokerStatus(true);
 
     try {
-      setBrokerStatus(await getBrokerStatus());
+      const [statusSnapshot, capabilitiesSnapshot] = await Promise.all([
+        getBrokerStatus(),
+        getBrokerCapabilities(),
+      ]);
+      setBrokerStatus(statusSnapshot);
+      setBrokerCapabilities(capabilitiesSnapshot);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load IBKR broker status');
     } finally {
@@ -316,6 +324,35 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                     ? 'Order submission enabled'
                     : 'Order submission disabled'}
                 </dd>
+              </div>
+            </dl>
+          ) : null}
+
+          {brokerCapabilities ? (
+            <dl className="backtest-summary">
+              <div>
+                <dt>Execution mode</dt>
+                <dd>Audit-only order intents</dd>
+              </div>
+              <div>
+                <dt>Paper broker submission</dt>
+                <dd>
+                  {brokerCapabilities.supports_paper_broker_submission
+                    ? 'Paper broker submission enabled'
+                    : 'Paper broker submission disabled'}
+                </dd>
+              </div>
+              <div>
+                <dt>Live broker submission</dt>
+                <dd>
+                  {brokerCapabilities.supports_live_broker_submission
+                    ? 'Live broker submission enabled'
+                    : 'Live broker submission disabled'}
+                </dd>
+              </div>
+              <div>
+                <dt>Capability note</dt>
+                <dd>{brokerCapabilities.message}</dd>
               </div>
             </dl>
           ) : null}

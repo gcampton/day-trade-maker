@@ -132,6 +132,16 @@ export type BrokerStatus = {
   message: string;
 };
 
+export type BrokerCapabilities = {
+  provider: 'interactive_brokers';
+  current_execution_mode: 'audit_only';
+  supports_order_intents: boolean;
+  supports_paper_broker_submission: boolean;
+  supports_live_broker_submission: boolean;
+  order_submission_enabled: boolean;
+  message: string;
+};
+
 export type PaperOrderIntentCreatePayload = {
   strategy_id: number;
   risk_check_id: number;
@@ -261,6 +271,16 @@ export async function getBrokerStatus(): Promise<BrokerStatus> {
   }
 
   return response.json() as Promise<BrokerStatus>;
+}
+
+export async function getBrokerCapabilities(): Promise<BrokerCapabilities> {
+  const response = await fetch('/api/broker/capabilities');
+
+  if (!response.ok) {
+    throw new Error('Failed to load broker capabilities');
+  }
+
+  return response.json() as Promise<BrokerCapabilities>;
 }
 
 export async function createPaperOrderIntent(

@@ -157,6 +157,16 @@ const brokerStatus = {
   message: 'IBKR read-only scaffold is configured; no broker session is connected.',
 };
 
+const brokerCapabilities = {
+  provider: 'interactive_brokers',
+  current_execution_mode: 'audit_only',
+  supports_order_intents: true,
+  supports_paper_broker_submission: false,
+  supports_live_broker_submission: false,
+  order_submission_enabled: false,
+  message: 'Current broker mode records audit-only paper order intents; no IBKR orders are submitted.',
+};
+
 const createdOrderIntent = {
   id: 1,
   strategy_id: 1,
@@ -302,6 +312,23 @@ describe('App', () => {
     expect(screen.getAllByText(/paper mode/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/read-only/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/order submission disabled/i)).toBeInTheDocument();
+  });
+
+  it('renders broker execution capability boundaries', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/capabilities');
+    });
+    expect(await screen.findByText(/execution mode/i)).toBeInTheDocument();
+    expect(screen.getByText(/audit-only order intents/i)).toBeInTheDocument();
+    expect(screen.getByText(/paper broker submission disabled/i)).toBeInTheDocument();
+    expect(screen.getByText(/live broker submission disabled/i)).toBeInTheDocument();
+    expect(screen.getByText(/no IBKR orders are submitted/i)).toBeInTheDocument();
   });
 
   it('runs a paper-mode risk check after approval and backtest', async () => {
@@ -511,6 +538,13 @@ function mockTradingApi() {
 
     if (url === '/api/broker/status') {
       return new Response(JSON.stringify(brokerStatus), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/broker/capabilities') {
+      return new Response(JSON.stringify(brokerCapabilities), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });

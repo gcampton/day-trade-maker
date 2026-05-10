@@ -87,6 +87,44 @@ const extractedStrategy = {
   },
 };
 
+const createdBacktest = {
+  id: 1,
+  strategy_id: 1,
+  dataset_id: 1,
+  created_at: '2026-05-10T18:22:00Z',
+  result: {
+    starting_cash: 10000,
+    ending_cash: 10001,
+    net_pnl: 1,
+    total_trades: 1,
+    win_rate: 1,
+    trades: [
+      {
+        entry_timestamp: '2026-05-10T14:35:00Z',
+        exit_timestamp: '2026-05-10T14:35:00Z',
+        entry_price: 101,
+        exit_price: 102,
+        quantity: 1,
+        pnl: 1,
+      },
+    ],
+    markers: [
+      {
+        timestamp: '2026-05-10T14:35:00Z',
+        price: 101,
+        side: 'buy',
+        label: 'Buy breakout',
+      },
+      {
+        timestamp: '2026-05-10T14:35:00Z',
+        price: 102,
+        side: 'exit',
+        label: 'Exit close',
+      },
+    ],
+  },
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -159,37 +197,11 @@ describe('App', () => {
   });
 
   it('imports CSV market data and renders backend candles on the chart', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
-      if (url === '/api/market-data/import-csv') {
-        return new Response(JSON.stringify(importedDataset), {
-          status: 201,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-
-      if (url === '/api/market-data/1/candles') {
-        return new Response(JSON.stringify(importedCandles), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-
-      return new Response(null, { status: 404 });
-    });
+    const fetchMock = mockTradingApi();
 
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText(/market symbol/i), { target: { value: 'AAPL' } });
-    fireEvent.change(screen.getByLabelText(/market timeframe/i), { target: { value: '5m' } });
-    fireEvent.change(screen.getByLabelText(/ohlcv csv/i), {
-      target: {
-        value:
-          'timestamp,open,high,low,close,volume\n' +
-          '2026-05-10T14:30:00Z,100,101.5,99.5,101,150000\n' +
-          '2026-05-10T14:35:00Z,101,103,100.5,102,200000\n',
-      },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /import candles/i }));
+    await importMarketDataThroughForm();
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/market-data/import-csv', expect.any(Object));
@@ -198,6 +210,34 @@ describe('App', () => {
     expect(await screen.findByText(/imported aapl 5m dataset with 2 candles/i)).toBeInTheDocument();
     expect(screen.getByText(/last close/i)).toBeInTheDocument();
     expect(screen.getByText('102.00')).toBeInTheDocument();
+  });
+
+  it('runs a backtest for the extracted strategy against the imported dataset', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    await saveTranscriptThroughForm();
+    fireEvent.click(await screen.findByRole('button', { name: /extract strategy candidates/i }));
+    await screen.findByText(/opening range breakout with volume/i);
+    await importMarketDataThroughForm();
+
+    fireEvent.click(await screen.findByRole('button', { name: /run backtest/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/backtests', expect.any(Object));
+    });
+    const request = fetchMock.mock.calls.find(([url]) => url === '/api/backtests')?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      strategy_id: 1,
+      dataset_id: 1,
+      starting_cash: 10000,
+    });
+    expect(await screen.findByText(/backtest net pnl/i)).toBeInTheDocument();
+    expect(screen.getByText('$1.00')).toBeInTheDocument();
+    expect(screen.getByText(/1 trade/i)).toBeInTheDocument();
+    expect(screen.getByText(/buy breakout/i)).toBeInTheDocument();
+    expect(screen.getByText(/exit close/i)).toBeInTheDocument();
   });
 });
 
@@ -223,4 +263,61 @@ async function saveTranscriptThroughForm() {
   fireEvent.click(screen.getByRole('button', { name: /save transcript/i }));
 
   await screen.findByText(/saved transcript #1/i);
+}
+
+async function importMarketDataThroughForm() {
+  fireEvent.change(screen.getByLabelText(/market symbol/i), { target: { value: 'AAPL' } });
+  fireEvent.change(screen.getByLabelText(/market timeframe/i), { target: { value: '5m' } });
+  fireEvent.change(screen.getByLabelText(/ohlcv csv/i), {
+    target: {
+      value:
+        'timestamp,open,high,low,close,volume\n' +
+        '2026-05-10T14:30:00Z,100,101.5,99.5,101,150000\n' +
+        '2026-05-10T14:35:00Z,101,103,100.5,102,200000\n',
+    },
+  });
+  fireEvent.click(screen.getByRole('button', { name: /import candles/i }));
+
+  await screen.findByText(/imported aapl 5m dataset with 2 candles/i);
+}
+
+function mockTradingApi() {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+    if (url === '/api/transcripts') {
+      return new Response(JSON.stringify(savedTranscript), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/transcripts/1/extract-strategies') {
+      return new Response(JSON.stringify([extractedStrategy]), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/market-data/import-csv') {
+      return new Response(JSON.stringify(importedDataset), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/market-data/1/candles') {
+      return new Response(JSON.stringify(importedCandles), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/backtests') {
+      return new Response(JSON.stringify(createdBacktest), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(null, { status: 404 });
+  });
 }

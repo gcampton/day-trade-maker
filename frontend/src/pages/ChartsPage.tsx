@@ -3,7 +3,10 @@ import { FormEvent, useState } from 'react';
 import {
   getMarketDataCandles,
   importMarketDataCsv,
+  runBacktest,
+  type BacktestRun,
   type MarketDataDatasetSummary,
+  type StrategyCandidate,
 } from '../api/client';
 import { KLineStrategyChart } from '../charts/KLineStrategyChart';
 import type { Candle, StrategyMarker } from '../charts/types';
@@ -26,14 +29,20 @@ const exampleCsv = `timestamp,open,high,low,close,volume
 2026-05-10T14:35:00Z,101,103,100.5,102,200000
 `;
 
-export function ChartsPage() {
+type ChartsPageProps = {
+  selectedStrategy: StrategyCandidate | null;
+};
+
+export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [symbol, setSymbol] = useState('AAPL');
   const [timeframe, setTimeframe] = useState('5m');
   const [csvText, setCsvText] = useState(exampleCsv);
   const [candles, setCandles] = useState<Candle[]>(sampleCandles);
   const [dataset, setDataset] = useState<MarketDataDatasetSummary | null>(null);
+  const [backtestRun, setBacktestRun] = useState<BacktestRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [isRunningBacktest, setIsRunningBacktest] = useState(false);
 
   async function handleImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,6 +53,7 @@ export function ChartsPage() {
       const imported = await importMarketDataCsv({ symbol, timeframe, csv_text: csvText });
       const loadedCandles = await getMarketDataCandles(imported.id);
       setDataset(imported);
+      setBacktestRun(null);
       setCandles(
         loadedCandles.map((candle) => ({
           ...candle,
@@ -56,6 +66,35 @@ export function ChartsPage() {
       setIsImporting(false);
     }
   }
+
+  async function handleBacktest() {
+    if (!selectedStrategy || !dataset) {
+      return;
+    }
+
+    setError(null);
+    setIsRunningBacktest(true);
+
+    try {
+      const created = await runBacktest({
+        strategy_id: selectedStrategy.id,
+        dataset_id: dataset.id,
+        starting_cash: 10000,
+      });
+      setBacktestRun(created);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to run backtest');
+    } finally {
+      setIsRunningBacktest(false);
+    }
+  }
+
+  const backtestMarkers: StrategyMarker[] = backtestRun
+    ? backtestRun.result.markers.map((marker) => ({
+        ...marker,
+        timestamp: Date.parse(marker.timestamp),
+      }))
+    : sampleMarkers;
 
   return (
     <section className="chart-workspace-grid" aria-label="Market data chart workspace">
@@ -99,7 +138,52 @@ export function ChartsPage() {
         {error ? <p className="error">{error}</p> : null}
       </form>
 
-      <KLineStrategyChart candles={candles} markers={sampleMarkers} />
+      <section className="chart-stack">
+        <section className="backtest-panel" aria-label="Backtest controls">
+          <div className="form-heading">
+            <p className="eyebrow">Backtesting</p>
+            <h2>Run extracted strategy</h2>
+            <p>
+              Uses the selected structured strategy and imported candle dataset. Starting cash is
+              fixed at $10,000 for this first safe research slice.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            disabled={!selectedStrategy || !dataset || isRunningBacktest}
+            onClick={handleBacktest}
+          >
+            {isRunningBacktest ? 'Running backtest…' : 'Run backtest'}
+          </button>
+
+          {!selectedStrategy ? <p className="muted">Extract a strategy candidate first.</p> : null}
+          {!dataset ? <p className="muted">Import market data before running a backtest.</p> : null}
+
+          {backtestRun ? (
+            <dl className="backtest-summary">
+              <div>
+                <dt>Backtest net PnL</dt>
+                <dd>{formatUsd(backtestRun.result.net_pnl)}</dd>
+              </div>
+              <div>
+                <dt>Trades</dt>
+                <dd>{backtestRun.result.total_trades} trade</dd>
+              </div>
+              <div>
+                <dt>Win rate</dt>
+                <dd>{Math.round(backtestRun.result.win_rate * 100)}%</dd>
+              </div>
+            </dl>
+          ) : null}
+        </section>
+
+        <KLineStrategyChart candles={candles} markers={backtestMarkers} />
+      </section>
     </section>
   );
+}
+
+function formatUsd(value: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 }

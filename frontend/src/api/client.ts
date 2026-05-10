@@ -68,6 +68,40 @@ export type MarketDataCandle = {
   volume: number;
 };
 
+export type BacktestCreatePayload = {
+  strategy_id: number;
+  dataset_id: number;
+  starting_cash: number;
+};
+
+export type BacktestRun = {
+  id: number;
+  strategy_id: number;
+  dataset_id: number;
+  result: {
+    starting_cash: number;
+    ending_cash: number;
+    net_pnl: number;
+    total_trades: number;
+    win_rate: number;
+    trades: Array<{
+      entry_timestamp: string;
+      exit_timestamp: string;
+      entry_price: number;
+      exit_price: number;
+      quantity: number;
+      pnl: number;
+    }>;
+    markers: Array<{
+      timestamp: string;
+      price: number;
+      side: 'buy' | 'sell' | 'exit' | 'warning';
+      label: string;
+    }>;
+  };
+  created_at: string;
+};
+
 export async function createTranscript(payload: TranscriptPayload): Promise<Transcript> {
   const response = await fetch('/api/transcripts', {
     method: 'POST',
@@ -120,4 +154,18 @@ export async function getMarketDataCandles(datasetId: number): Promise<MarketDat
   }
 
   return response.json() as Promise<MarketDataCandle[]>;
+}
+
+export async function runBacktest(payload: BacktestCreatePayload): Promise<BacktestRun> {
+  const response = await fetch('/api/backtests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to run backtest');
+  }
+
+  return response.json() as Promise<BacktestRun>;
 }

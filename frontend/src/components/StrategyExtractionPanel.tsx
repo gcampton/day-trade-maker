@@ -8,9 +8,10 @@ import {
 
 type StrategyExtractionPanelProps = {
   transcript: Transcript | null;
+  onCandidateSelected?: (candidate: StrategyCandidate) => void;
 };
 
-export function StrategyExtractionPanel({ transcript }: StrategyExtractionPanelProps) {
+export function StrategyExtractionPanel({ transcript, onCandidateSelected }: StrategyExtractionPanelProps) {
   const [candidates, setCandidates] = useState<StrategyCandidate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -26,6 +27,9 @@ export function StrategyExtractionPanel({ transcript }: StrategyExtractionPanelP
     try {
       const extracted = await extractStrategyCandidates(transcript.id);
       setCandidates(extracted);
+      if (extracted[0]) {
+        onCandidateSelected?.(extracted[0]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to extract strategy candidates');
     } finally {

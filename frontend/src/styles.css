@@ -28,6 +28,7 @@ body {
 .transcript-form,
 .strategy-panel,
 .market-data-form,
+.backtest-panel,
 .chart-panel,
 .dashboard-grid article {
   border: 1px solid rgba(148, 163, 184, 0.24);
@@ -221,7 +222,8 @@ blockquote {
   color: #cbd5e1;
 }
 
-.market-data-form {
+.market-data-form,
+.backtest-panel {
   display: grid;
   gap: 1rem;
   padding: clamp(1.25rem, 3vw, 2rem);
@@ -245,6 +247,15 @@ blockquote {
   display: grid;
   gap: 1rem;
   padding: clamp(1.25rem, 3vw, 2rem);
+}
+
+.chart-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.backtest-summary {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 }
 
 .chart-panel-header {

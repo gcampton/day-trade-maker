@@ -2,6 +2,10 @@ import { FormEvent, useState } from 'react';
 
 import { createTranscript, type Transcript } from '../api/client';
 
+type TranscriptFormProps = {
+  onSaved?: (transcript: Transcript) => void;
+};
+
 function splitTags(value: string): string[] {
   return value
     .split(',')
@@ -9,7 +13,7 @@ function splitTags(value: string): string[] {
     .filter(Boolean);
 }
 
-export function TranscriptForm() {
+export function TranscriptForm({ onSaved }: TranscriptFormProps) {
   const [title, setTitle] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [creator, setCreator] = useState('');
@@ -35,6 +39,7 @@ export function TranscriptForm() {
         timeframes: splitTags(timeframes),
       });
       setSavedTranscript(saved);
+      onSaved?.(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save transcript');
     } finally {

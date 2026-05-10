@@ -1,8 +1,14 @@
+import { useState } from 'react';
+
 import './styles.css';
 
+import { StrategyExtractionPanel } from './components/StrategyExtractionPanel';
 import { TranscriptForm } from './components/TranscriptForm';
+import type { Transcript } from './api/client';
 
 export function App() {
+  const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
+
   return (
     <main className="app-shell">
       <section className="hero-panel">
@@ -15,7 +21,10 @@ export function App() {
         </p>
       </section>
 
-      <TranscriptForm />
+      <div className="workflow-grid">
+        <TranscriptForm onSaved={setSelectedTranscript} />
+        <StrategyExtractionPanel transcript={selectedTranscript} />
+      </div>
 
       <section className="dashboard-grid" aria-label="Dashboard sections">
         <article>

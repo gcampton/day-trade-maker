@@ -164,6 +164,28 @@ export type PaperOrderIntent = PaperOrderIntentCreatePayload & {
   created_at: string;
 };
 
+export type AuditSnapshot = {
+  version: 1;
+  exported_at: string;
+  transcripts: Transcript[];
+  strategies: StrategyCandidate[];
+  market_data: Array<MarketDataDatasetSummary & { candles: MarketDataCandle[] }>;
+  backtests: BacktestRun[];
+  risk_checks: RiskCheckRun[];
+  paper_order_intents: PaperOrderIntent[];
+};
+
+export type AuditImportSummary = {
+  version: 1;
+  transcript_count: number;
+  strategy_count: number;
+  market_data_count: number;
+  backtest_count: number;
+  risk_check_count: number;
+  paper_order_intent_count: number;
+  message: string;
+};
+
 export async function createTranscript(payload: TranscriptPayload): Promise<Transcript> {
   const response = await fetch('/api/transcripts', {
     method: 'POST',
@@ -307,4 +329,28 @@ export async function getPaperOrderIntents(): Promise<PaperOrderIntent[]> {
   }
 
   return response.json() as Promise<PaperOrderIntent[]>;
+}
+
+export async function exportAuditSnapshot(): Promise<AuditSnapshot> {
+  const response = await fetch('/api/audit/export');
+
+  if (!response.ok) {
+    throw new Error('Failed to export audit snapshot');
+  }
+
+  return response.json() as Promise<AuditSnapshot>;
+}
+
+export async function importAuditSnapshot(snapshot: AuditSnapshot): Promise<AuditImportSummary> {
+  const response = await fetch('/api/audit/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(snapshot),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to import audit snapshot');
+  }
+
+  return response.json() as Promise<AuditImportSummary>;
 }

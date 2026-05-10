@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from day_trade_maker.routes.audit import router as audit_router
 from day_trade_maker.routes.backtests import router as backtests_router
 from day_trade_maker.routes.broker import router as broker_router
 from day_trade_maker.routes.market_data import router as market_data_router
@@ -14,6 +15,7 @@ app.include_router(market_data_router)
 app.include_router(backtests_router)
 app.include_router(risk_checks_router)
 app.include_router(broker_router)
+app.include_router(audit_router)
 
 
 @app.get("/health")

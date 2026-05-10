@@ -188,6 +188,28 @@ const createdOrderIntent = {
 
 const orderIntentHistory = [createdOrderIntent];
 
+const auditSnapshot = {
+  version: 1,
+  exported_at: '2026-05-10T18:25:00Z',
+  transcripts: [savedTranscript],
+  strategies: [approvedStrategy],
+  market_data: [{ ...importedDataset, candles: importedCandles }],
+  backtests: [createdBacktest],
+  risk_checks: [createdRiskCheck],
+  paper_order_intents: [createdOrderIntent],
+};
+
+const auditImportSummary = {
+  version: 1,
+  transcript_count: 1,
+  strategy_count: 1,
+  market_data_count: 1,
+  backtest_count: 1,
+  risk_check_count: 1,
+  paper_order_intent_count: 1,
+  message: 'Audit snapshot imported into in-memory stores.',
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -430,6 +452,43 @@ describe('App', () => {
 
     expect(screen.getByRole('button', { name: /record paper order intent/i })).toBeDisabled();
   });
+
+  it('exports the audit snapshot as editable local JSON', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /export audit snapshot/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/audit/export');
+    });
+    expect(await screen.findByText(/exported audit snapshot with 1 transcript and 1 order intent/i)).toBeInTheDocument();
+    expect((screen.getByLabelText(/audit snapshot json/i) as HTMLTextAreaElement).value).toContain(
+      '"paper_order_intents"',
+    );
+  });
+
+  it('imports a pasted audit snapshot into the backend stores', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText(/audit snapshot json/i), {
+      target: { value: JSON.stringify(auditSnapshot) },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /import audit snapshot/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/audit/import', expect.any(Object));
+    });
+    const request = fetchMock.mock.calls.find(([url]) => url === '/api/audit/import')?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      version: 1,
+      paper_order_intents: [{ symbol: 'AAPL', submitted_to_broker: false }],
+    });
+    expect(await screen.findByText(/imported audit snapshot with 1 transcript and 1 order intent/i)).toBeInTheDocument();
+  });
 });
 
 async function saveTranscriptThroughForm() {
@@ -559,6 +618,20 @@ function mockTradingApi() {
 
     if (url === '/api/broker/order-intents') {
       return new Response(JSON.stringify(orderIntentHistory), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/audit/export') {
+      return new Response(JSON.stringify(auditSnapshot), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/audit/import') {
+      return new Response(JSON.stringify(auditImportSummary), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });

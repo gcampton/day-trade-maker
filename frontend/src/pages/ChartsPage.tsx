@@ -2,13 +2,17 @@ import { FormEvent, useState } from 'react';
 
 import {
   createPaperOrderIntent,
+  exportAuditSnapshot,
   getBrokerCapabilities,
   getBrokerStatus,
   getMarketDataCandles,
   getPaperOrderIntents,
+  importAuditSnapshot,
   importMarketDataCsv,
   runBacktest,
   runRiskCheck,
+  type AuditImportSummary,
+  type AuditSnapshot,
   type BacktestRun,
   type BrokerCapabilities,
   type BrokerStatus,
@@ -54,6 +58,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [brokerCapabilities, setBrokerCapabilities] = useState<BrokerCapabilities | null>(null);
   const [orderIntent, setOrderIntent] = useState<PaperOrderIntent | null>(null);
   const [orderIntentHistory, setOrderIntentHistory] = useState<PaperOrderIntent[]>([]);
+  const [auditSnapshotJson, setAuditSnapshotJson] = useState('');
+  const [auditMessage, setAuditMessage] = useState<string | null>(null);
   const [orderSymbol, setOrderSymbol] = useState('AAPL');
   const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy');
   const [orderQuantity, setOrderQuantity] = useState('10');
@@ -63,6 +69,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [isRunningRiskCheck, setIsRunningRiskCheck] = useState(false);
   const [isLoadingBrokerStatus, setIsLoadingBrokerStatus] = useState(false);
   const [isCreatingOrderIntent, setIsCreatingOrderIntent] = useState(false);
+  const [isExportingAudit, setIsExportingAudit] = useState(false);
+  const [isImportingAudit, setIsImportingAudit] = useState(false);
 
   async function handleImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -194,6 +202,38 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     }
   }
 
+  async function handleExportAuditSnapshot() {
+    setError(null);
+    setAuditMessage(null);
+    setIsExportingAudit(true);
+
+    try {
+      const snapshot = await exportAuditSnapshot();
+      setAuditSnapshotJson(JSON.stringify(snapshot, null, 2));
+      setAuditMessage(formatAuditSnapshotMessage('Exported', snapshot));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export audit snapshot');
+    } finally {
+      setIsExportingAudit(false);
+    }
+  }
+
+  async function handleImportAuditSnapshot() {
+    setError(null);
+    setAuditMessage(null);
+    setIsImportingAudit(true);
+
+    try {
+      const snapshot = JSON.parse(auditSnapshotJson) as AuditSnapshot;
+      const summary = await importAuditSnapshot(snapshot);
+      setAuditMessage(formatAuditImportSummary(summary));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to import audit snapshot');
+    } finally {
+      setIsImportingAudit(false);
+    }
+  }
+
   const backtestMarkers: StrategyMarker[] = backtestRun
     ? backtestRun.result.markers.map((marker) => ({
         ...marker,
@@ -244,6 +284,42 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
         ) : null}
         {error ? <p className="error">{error}</p> : null}
       </form>
+
+      <section className="market-data-form" aria-label="Audit snapshot controls">
+        <div className="form-heading">
+          <p className="eyebrow">Audit Archive</p>
+          <h2>Export/import local audit snapshot</h2>
+          <p>
+            Copy this JSON to save transcripts, strategies, datasets, backtests, risk checks, and
+            paper order intents before a real database is wired in.
+          </p>
+        </div>
+
+        <div className="form-row">
+          <button type="button" disabled={isExportingAudit} onClick={handleExportAuditSnapshot}>
+            {isExportingAudit ? 'Exporting audit snapshot…' : 'Export audit snapshot'}
+          </button>
+          <button
+            type="button"
+            disabled={isImportingAudit || auditSnapshotJson.trim().length === 0}
+            onClick={handleImportAuditSnapshot}
+          >
+            {isImportingAudit ? 'Importing audit snapshot…' : 'Import audit snapshot'}
+          </button>
+        </div>
+
+        <label>
+          Audit snapshot JSON
+          <textarea
+            rows={8}
+            value={auditSnapshotJson}
+            onChange={(event) => setAuditSnapshotJson(event.target.value)}
+            placeholder="Export a snapshot or paste saved audit JSON here."
+          />
+        </label>
+
+        {auditMessage ? <p className="success">{auditMessage}</p> : null}
+      </section>
 
       <section className="chart-stack">
         <section className="backtest-panel" aria-label="Backtest controls">
@@ -469,4 +545,12 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
 
 function formatUsd(value: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+}
+
+function formatAuditSnapshotMessage(action: string, snapshot: AuditSnapshot): string {
+  return `${action} audit snapshot with ${snapshot.transcripts.length} transcript and ${snapshot.paper_order_intents.length} order intent`;
+}
+
+function formatAuditImportSummary(summary: AuditImportSummary): string {
+  return `Imported audit snapshot with ${summary.transcript_count} transcript and ${summary.paper_order_intent_count} order intent`;
 }

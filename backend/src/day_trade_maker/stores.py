@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import UTC, datetime
 
 from day_trade_maker.backtest import BacktestResult
@@ -35,6 +37,10 @@ class TranscriptStore:
     def list(self) -> list[Transcript]:
         return list(self._transcripts)
 
+    def replace_all(self, transcripts: list[Transcript]) -> None:
+        self._transcripts = list(transcripts)
+        self._next_id = next_id(transcripts)
+
 
 class StrategyCandidateStore:
     def __init__(self) -> None:
@@ -71,6 +77,10 @@ class StrategyCandidateStore:
         ]
         return approved
 
+    def replace_all(self, strategies: list[StrategyCandidate]) -> None:
+        self._strategies = list(strategies)
+        self._next_id = next_id(strategies)
+
 
 class MarketDataStore:
     def __init__(self) -> None:
@@ -91,6 +101,13 @@ class MarketDataStore:
     def get(self, dataset_id: int) -> MarketDataDataset | None:
         return next((dataset for dataset in self._datasets if dataset.id == dataset_id), None)
 
+    def list(self) -> list[MarketDataDataset]:
+        return list(self._datasets)
+
+    def replace_all(self, datasets: list[MarketDataDataset]) -> None:
+        self._datasets = list(datasets)
+        self._next_id = next_id(datasets)
+
 
 class BacktestStore:
     def __init__(self) -> None:
@@ -110,6 +127,13 @@ class BacktestStore:
 
     def get(self, backtest_id: int) -> BacktestRun | None:
         return next((backtest for backtest in self._backtests if backtest.id == backtest_id), None)
+
+    def list(self) -> list[BacktestRun]:
+        return list(self._backtests)
+
+    def replace_all(self, backtests: list[BacktestRun]) -> None:
+        self._backtests = list(backtests)
+        self._next_id = next_id(backtests)
 
 
 class RiskCheckStore:
@@ -146,6 +170,13 @@ class RiskCheckStore:
             None,
         )
 
+    def list(self) -> list[RiskCheckRun]:
+        return list(self._risk_checks)
+
+    def replace_all(self, risk_checks: list[RiskCheckRun]) -> None:
+        self._risk_checks = list(risk_checks)
+        self._next_id = next_id(risk_checks)
+
 
 class PaperOrderIntentStore:
     def __init__(self) -> None:
@@ -165,6 +196,14 @@ class PaperOrderIntentStore:
 
     def list(self) -> list[PaperOrderIntent]:
         return list(self._order_intents)
+
+    def replace_all(self, order_intents: list[PaperOrderIntent]) -> None:
+        self._order_intents = list(order_intents)
+        self._next_id = next_id(order_intents)
+
+
+def next_id(items: list[object]) -> int:
+    return max((item.id for item in items), default=0) + 1
 
 
 transcript_store = TranscriptStore()

@@ -225,3 +225,25 @@ class PaperOrderIntent(BaseModel):
     checks: list[str]
     message: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class AuditSnapshot(BaseModel):
+    version: Literal[1] = 1
+    exported_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    transcripts: list[Transcript] = Field(default_factory=list)
+    strategies: list[StrategyCandidate] = Field(default_factory=list)
+    market_data: list[MarketDataDataset] = Field(default_factory=list)
+    backtests: list[BacktestRun] = Field(default_factory=list)
+    risk_checks: list[RiskCheckRun] = Field(default_factory=list)
+    paper_order_intents: list[PaperOrderIntent] = Field(default_factory=list)
+
+
+class AuditImportSummary(BaseModel):
+    version: Literal[1] = 1
+    transcript_count: int
+    strategy_count: int
+    market_data_count: int
+    backtest_count: int
+    risk_check_count: int
+    paper_order_intent_count: int
+    message: str

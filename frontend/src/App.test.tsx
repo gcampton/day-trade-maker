@@ -216,6 +216,18 @@ const importedMsftAuditSnapshot = {
   paper_order_intents: [{ ...createdOrderIntent, symbol: 'MSFT', side: 'sell', quantity: 3 }],
 };
 
+const auditStatus = {
+  provider: 'sqlite',
+  db_path: '/home/garratt/dev/1_myprojects/day-trade-maker/backend/.day-trade-maker/audit.sqlite3',
+  snapshot_exists: true,
+  transcript_count: 1,
+  strategy_count: 1,
+  market_data_count: 1,
+  backtest_count: 1,
+  risk_check_count: 1,
+  paper_order_intent_count: 1,
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -272,6 +284,21 @@ describe('App', () => {
     expect(screen.getByText(/broker readiness passed/i)).toBeInTheDocument();
     expect(screen.getByText(/paper order intent audit log/i)).toBeInTheDocument();
     expect(screen.getByText(/AAPL buy 10/i)).toBeInTheDocument();
+  });
+
+  it('shows the local audit persistence status and sqlite path', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/audit/status');
+    });
+    expect(await screen.findByText(/local audit persistence/i)).toBeInTheDocument();
+    expect(screen.getByText('sqlite')).toBeInTheDocument();
+    expect(screen.getByText(/audit.sqlite3/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 transcript/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 order intent/i)).toBeInTheDocument();
   });
 
   it('submits a pasted transcript to the backend', async () => {
@@ -553,6 +580,7 @@ describe('App', () => {
 
     render(<App />);
 
+    await screen.findByText(/imported aapl 5m dataset with 2 candles/i);
     fireEvent.change(screen.getByLabelText(/audit snapshot json/i), {
       target: { value: JSON.stringify(importedMsftAuditSnapshot) },
     });
@@ -697,6 +725,13 @@ function mockTradingApi() {
 
     if (url === '/api/audit/export') {
       return new Response(JSON.stringify(auditSnapshot), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/audit/status') {
+      return new Response(JSON.stringify(auditStatus), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });

@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import {
   createPaperOrderIntent,
   exportAuditSnapshot,
+  getAuditPersistenceStatus,
   getBrokerCapabilities,
   getBrokerStatus,
   getMarketDataCandles,
@@ -12,6 +13,7 @@ import {
   runBacktest,
   runRiskCheck,
   type AuditImportSummary,
+  type AuditPersistenceStatus,
   type AuditSnapshot,
   type BacktestRun,
   type BrokerCapabilities,
@@ -60,6 +62,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [orderIntentHistory, setOrderIntentHistory] = useState<PaperOrderIntent[]>([]);
   const [auditSnapshotJson, setAuditSnapshotJson] = useState('');
   const [auditMessage, setAuditMessage] = useState<string | null>(null);
+  const [auditPersistenceStatus, setAuditPersistenceStatus] = useState<AuditPersistenceStatus | null>(null);
   const [orderSymbol, setOrderSymbol] = useState('AAPL');
   const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy');
   const [orderQuantity, setOrderQuantity] = useState('10');
@@ -77,11 +80,15 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
 
     async function restoreWorkflowState() {
       try {
-        const snapshot = await exportAuditSnapshot();
+        const [snapshot, status] = await Promise.all([
+          exportAuditSnapshot(),
+          getAuditPersistenceStatus(),
+        ]);
         if (!isMounted) {
           return;
         }
         applyAuditSnapshotToWorkspace(snapshot);
+        setAuditPersistenceStatus(status);
       } catch {
         // Startup restore is best-effort so the chart workspace still works before API startup.
       }
@@ -376,6 +383,26 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
         </label>
 
         {auditMessage ? <p className="success">{auditMessage}</p> : null}
+
+        {auditPersistenceStatus ? (
+          <dl className="backtest-summary" aria-label="Local audit persistence status">
+            <div>
+              <dt>Local audit persistence</dt>
+              <dd>{auditPersistenceStatus.provider}</dd>
+            </div>
+            <div>
+              <dt>SQLite path</dt>
+              <dd>{auditPersistenceStatus.db_path}</dd>
+            </div>
+            <div>
+              <dt>Saved artifacts</dt>
+              <dd>
+                {auditPersistenceStatus.transcript_count} transcript;{' '}
+                {auditPersistenceStatus.paper_order_intent_count} order intent
+              </dd>
+            </div>
+          </dl>
+        ) : null}
       </section>
 
       <section className="chart-stack">

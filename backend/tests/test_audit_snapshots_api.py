@@ -112,3 +112,18 @@ def test_import_audit_snapshot_replaces_in_memory_audit_state() -> None:
     assert body["paper_order_intent_count"] == len(snapshot["paper_order_intents"])
     assert client.get("/api/transcripts").json()[0]["title"] == "Restored audit snapshot"
     assert client.get("/api/broker/order-intents").json()[0]["symbol"] == "MSFT"
+
+
+def test_audit_status_exposes_local_persistence_location_and_counts() -> None:
+    client = TestClient(app)
+    create_audited_order_intent(client)
+
+    response = client.get("/api/audit/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "sqlite"
+    assert body["db_path"].endswith("audit.sqlite3")
+    assert body["snapshot_exists"] is True
+    assert body["transcript_count"] >= 1
+    assert body["paper_order_intent_count"] >= 1

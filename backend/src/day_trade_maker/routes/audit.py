@@ -1,7 +1,8 @@
 from fastapi import APIRouter
 
-from day_trade_maker.schemas import AuditImportSummary, AuditSnapshot
+from day_trade_maker.schemas import AuditImportSummary, AuditPersistenceStatus, AuditSnapshot
 from day_trade_maker.stores import (
+    audit_snapshot_repository,
     backtest_store,
     market_data_store,
     paper_order_intent_store,
@@ -11,6 +12,20 @@ from day_trade_maker.stores import (
 )
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
+
+
+@router.get("/status", response_model=AuditPersistenceStatus)
+def get_audit_persistence_status() -> AuditPersistenceStatus:
+    return AuditPersistenceStatus(
+        db_path=str(audit_snapshot_repository.db_path),
+        snapshot_exists=audit_snapshot_repository.db_path.exists(),
+        transcript_count=len(transcript_store.list()),
+        strategy_count=len(strategy_candidate_store.list()),
+        market_data_count=len(market_data_store.list()),
+        backtest_count=len(backtest_store.list()),
+        risk_check_count=len(risk_check_store.list()),
+        paper_order_intent_count=len(paper_order_intent_store.list()),
+    )
 
 
 @router.get("/export", response_model=AuditSnapshot)

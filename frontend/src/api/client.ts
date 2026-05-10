@@ -186,6 +186,18 @@ export type AuditImportSummary = {
   message: string;
 };
 
+export type AuditPersistenceStatus = {
+  provider: 'sqlite';
+  db_path: string;
+  snapshot_exists: boolean;
+  transcript_count: number;
+  strategy_count: number;
+  market_data_count: number;
+  backtest_count: number;
+  risk_check_count: number;
+  paper_order_intent_count: number;
+};
+
 export async function getTranscripts(): Promise<Transcript[]> {
   const response = await fetch('/api/transcripts');
 
@@ -359,6 +371,16 @@ export async function exportAuditSnapshot(): Promise<AuditSnapshot> {
   }
 
   return response.json() as Promise<AuditSnapshot>;
+}
+
+export async function getAuditPersistenceStatus(): Promise<AuditPersistenceStatus> {
+  const response = await fetch('/api/audit/status');
+
+  if (!response.ok) {
+    throw new Error('Failed to load audit persistence status');
+  }
+
+  return response.json() as Promise<AuditPersistenceStatus>;
 }
 
 export async function importAuditSnapshot(snapshot: AuditSnapshot): Promise<AuditImportSummary> {

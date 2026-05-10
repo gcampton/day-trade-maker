@@ -247,3 +247,15 @@ class AuditImportSummary(BaseModel):
     risk_check_count: int
     paper_order_intent_count: int
     message: str
+
+
+class AuditPersistenceStatus(BaseModel):
+    provider: Literal["sqlite"] = "sqlite"
+    db_path: str
+    snapshot_exists: bool
+    transcript_count: int
+    strategy_count: int
+    market_data_count: int
+    backtest_count: int
+    risk_check_count: int
+    paper_order_intent_count: int

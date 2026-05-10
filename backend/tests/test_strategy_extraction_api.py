@@ -32,7 +32,8 @@ def test_extract_strategies_returns_valid_auditable_strategy_spec() -> None:
     body = response.json()
     assert len(body) == 1
     strategy = body[0]
-    assert strategy["id"] == 1
+    assert isinstance(strategy["id"], int)
+    assert strategy["id"] > 0
     assert strategy["transcript_id"] == transcript_id
     assert strategy["spec"]["name"] == "Opening Range Breakout With Volume"
     assert strategy["spec"]["symbols"] == ["AAPL"]

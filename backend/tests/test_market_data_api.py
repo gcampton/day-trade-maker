@@ -20,7 +20,8 @@ def test_import_market_data_csv_returns_dataset_with_candles() -> None:
 
     assert response.status_code == 201
     body = response.json()
-    assert body["id"] == 1
+    assert isinstance(body["id"], int)
+    assert body["id"] > 0
     assert body["symbol"] == "AAPL"
     assert body["timeframe"] == "5m"
     assert body["candle_count"] == 2

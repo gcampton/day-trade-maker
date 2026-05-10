@@ -1,5 +1,7 @@
+from day_trade_maker.backtest import BacktestResult
 from day_trade_maker.market_data import Candle
 from day_trade_maker.schemas import (
+    BacktestRun,
     MarketDataDataset,
     StrategyCandidate,
     Transcript,
@@ -43,6 +45,9 @@ class StrategyCandidateStore:
     def list(self) -> list[StrategyCandidate]:
         return list(self._strategies)
 
+    def get(self, strategy_id: int) -> StrategyCandidate | None:
+        return next((strategy for strategy in self._strategies if strategy.id == strategy_id), None)
+
 
 class MarketDataStore:
     def __init__(self) -> None:
@@ -64,6 +69,24 @@ class MarketDataStore:
         return next((dataset for dataset in self._datasets if dataset.id == dataset_id), None)
 
 
+class BacktestStore:
+    def __init__(self) -> None:
+        self._backtests: list[BacktestRun] = []
+        self._next_id = 1
+
+    def create(self, strategy_id: int, dataset_id: int, result: BacktestResult) -> BacktestRun:
+        saved = BacktestRun(
+            id=self._next_id,
+            strategy_id=strategy_id,
+            dataset_id=dataset_id,
+            result=result,
+        )
+        self._next_id += 1
+        self._backtests.append(saved)
+        return saved
+
+
 transcript_store = TranscriptStore()
 strategy_candidate_store = StrategyCandidateStore()
 market_data_store = MarketDataStore()
+backtest_store = BacktestStore()

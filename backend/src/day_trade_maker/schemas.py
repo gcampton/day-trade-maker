@@ -3,6 +3,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+from day_trade_maker.backtest import BacktestResult
 from day_trade_maker.market_data import Candle
 from day_trade_maker.strategy_spec import StrategySpec
 
@@ -100,3 +101,19 @@ class CandleResponse(Candle):
         if value.tzinfo is None:
             return value.isoformat()
         return value.isoformat().replace("+00:00", "Z")
+
+
+class BacktestCreate(BaseModel):
+    strategy_id: int = Field(gt=0)
+    dataset_id: int = Field(gt=0)
+    starting_cash: float = Field(gt=0)
+
+
+class BacktestRun(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    strategy_id: int
+    dataset_id: int
+    result: BacktestResult
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

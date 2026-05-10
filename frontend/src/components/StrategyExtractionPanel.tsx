@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import {
+  approveStrategy,
   extractStrategyCandidates,
   type StrategyCandidate,
   type Transcript,
@@ -15,6 +16,7 @@ export function StrategyExtractionPanel({ transcript, onCandidateSelected }: Str
   const [candidates, setCandidates] = useState<StrategyCandidate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [approvingStrategyId, setApprovingStrategyId] = useState<number | null>(null);
 
   async function handleExtract() {
     if (!transcript) {
@@ -34,6 +36,23 @@ export function StrategyExtractionPanel({ transcript, onCandidateSelected }: Str
       setError(err instanceof Error ? err.message : 'Failed to extract strategy candidates');
     } finally {
       setIsExtracting(false);
+    }
+  }
+
+  async function handleApprove(candidate: StrategyCandidate) {
+    setError(null);
+    setApprovingStrategyId(candidate.id);
+
+    try {
+      const approved = await approveStrategy(candidate.id);
+      setCandidates((current) =>
+        current.map((item) => (item.id === approved.id ? approved : item)),
+      );
+      onCandidateSelected?.(approved);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to approve strategy');
+    } finally {
+      setApprovingStrategyId(null);
     }
   }
 
@@ -85,6 +104,17 @@ export function StrategyExtractionPanel({ transcript, onCandidateSelected }: Str
             </div>
           </dl>
           <blockquote>{candidate.spec.source_quotes[0]?.quote}</blockquote>
+          {candidate.status === 'approved' ? (
+            <p className="success">Approved by {candidate.approved_by}</p>
+          ) : (
+            <button
+              type="button"
+              disabled={approvingStrategyId === candidate.id}
+              onClick={() => void handleApprove(candidate)}
+            >
+              {approvingStrategyId === candidate.id ? 'Approving…' : 'Approve reviewed strategy'}
+            </button>
+          )}
         </article>
       ))}
     </section>

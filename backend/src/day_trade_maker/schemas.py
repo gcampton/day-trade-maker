@@ -51,7 +51,23 @@ class StrategyCandidate(BaseModel):
     transcript_id: int
     spec: StrategySpec
     status: str = "candidate"
+    approved_by: str | None = None
+    approval_notes: str | None = None
+    approved_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class StrategyApprovalCreate(BaseModel):
+    approved_by: NonEmptyString
+    notes: NonEmptyString
+
+    @field_validator("approved_by", "notes")
+    @classmethod
+    def reject_blank_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be blank")
+        return stripped
 
 
 class MarketDataImport(BaseModel):

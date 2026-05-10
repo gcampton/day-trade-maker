@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from day_trade_maker.backtest import BacktestResult
 from day_trade_maker.market_data import Candle
 from day_trade_maker.schemas import (
@@ -47,6 +49,24 @@ class StrategyCandidateStore:
 
     def get(self, strategy_id: int) -> StrategyCandidate | None:
         return next((strategy for strategy in self._strategies if strategy.id == strategy_id), None)
+
+    def approve(self, strategy_id: int, approved_by: str, notes: str) -> StrategyCandidate | None:
+        strategy = self.get(strategy_id)
+        if strategy is None:
+            return None
+
+        approved = strategy.model_copy(
+            update={
+                "status": "approved",
+                "approved_by": approved_by,
+                "approval_notes": notes,
+                "approved_at": datetime.now(UTC),
+            }
+        )
+        self._strategies = [
+            approved if item.id == strategy_id else item for item in self._strategies
+        ]
+        return approved
 
 
 class MarketDataStore:

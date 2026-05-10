@@ -42,6 +42,9 @@ export type StrategyCandidate = {
   transcript_id: number;
   spec: StrategySpec;
   status: string;
+  approved_by: string | null;
+  approval_notes: string | null;
+  approved_at: string | null;
   created_at: string;
 };
 
@@ -128,6 +131,23 @@ export async function extractStrategyCandidates(
   }
 
   return response.json() as Promise<StrategyCandidate[]>;
+}
+
+export async function approveStrategy(strategyId: number): Promise<StrategyCandidate> {
+  const response = await fetch(`/api/strategies/${strategyId}/approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      approved_by: 'Garratt',
+      notes: 'Reviewed source quote, entry, exit, and 1% risk rule.',
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to approve strategy');
+  }
+
+  return response.json() as Promise<StrategyCandidate>;
 }
 
 export async function importMarketDataCsv(

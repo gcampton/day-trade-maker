@@ -87,6 +87,14 @@ const extractedStrategy = {
   },
 };
 
+const approvedStrategy = {
+  ...extractedStrategy,
+  status: 'approved',
+  approved_by: 'Garratt',
+  approval_notes: 'Reviewed source quote, entry, exit, and 1% risk rule.',
+  approved_at: '2026-05-10T18:21:30Z',
+};
+
 const createdBacktest = {
   id: 1,
   strategy_id: 1,
@@ -196,6 +204,28 @@ describe('App', () => {
     expect(screen.getByText(/risk no more than 1%/i)).toBeInTheDocument();
   });
 
+  it('approves an extracted strategy candidate after review', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    await saveTranscriptThroughForm();
+    fireEvent.click(await screen.findByRole('button', { name: /extract strategy candidates/i }));
+    await screen.findByText(/opening range breakout with volume/i);
+
+    fireEvent.click(await screen.findByRole('button', { name: /approve reviewed strategy/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/strategies/1/approve', expect.any(Object));
+    });
+    const request = fetchMock.mock.calls.find(([url]) => url === '/api/strategies/1/approve')?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      approved_by: 'Garratt',
+      notes: 'Reviewed source quote, entry, exit, and 1% risk rule.',
+    });
+    expect(await screen.findByText(/approved by garratt/i)).toBeInTheDocument();
+  });
+
   it('imports CSV market data and renders backend candles on the chart', async () => {
     const fetchMock = mockTradingApi();
 
@@ -293,6 +323,13 @@ function mockTradingApi() {
     if (url === '/api/transcripts/1/extract-strategies') {
       return new Response(JSON.stringify([extractedStrategy]), {
         status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/strategies/1/approve') {
+      return new Response(JSON.stringify(approvedStrategy), {
+        status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }

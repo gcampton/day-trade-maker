@@ -105,6 +105,21 @@ export type BacktestRun = {
   created_at: string;
 };
 
+export type RiskCheckCreatePayload = {
+  strategy_id: number;
+  backtest_id: number;
+  paper_mode: boolean;
+  max_risk_percent: number;
+};
+
+export type RiskCheckRun = RiskCheckCreatePayload & {
+  id: number;
+  status: 'passed' | 'failed';
+  checks: string[];
+  failures: string[];
+  created_at: string;
+};
+
 export async function createTranscript(payload: TranscriptPayload): Promise<Transcript> {
   const response = await fetch('/api/transcripts', {
     method: 'POST',
@@ -188,4 +203,18 @@ export async function runBacktest(payload: BacktestCreatePayload): Promise<Backt
   }
 
   return response.json() as Promise<BacktestRun>;
+}
+
+export async function runRiskCheck(payload: RiskCheckCreatePayload): Promise<RiskCheckRun> {
+  const response = await fetch('/api/risk-checks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to run broker readiness check');
+  }
+
+  return response.json() as Promise<RiskCheckRun>;
 }

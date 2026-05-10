@@ -4,8 +4,10 @@ import {
   getMarketDataCandles,
   importMarketDataCsv,
   runBacktest,
+  runRiskCheck,
   type BacktestRun,
   type MarketDataDatasetSummary,
+  type RiskCheckRun,
   type StrategyCandidate,
 } from '../api/client';
 import { KLineStrategyChart } from '../charts/KLineStrategyChart';
@@ -40,9 +42,11 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [candles, setCandles] = useState<Candle[]>(sampleCandles);
   const [dataset, setDataset] = useState<MarketDataDatasetSummary | null>(null);
   const [backtestRun, setBacktestRun] = useState<BacktestRun | null>(null);
+  const [riskCheck, setRiskCheck] = useState<RiskCheckRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isRunningBacktest, setIsRunningBacktest] = useState(false);
+  const [isRunningRiskCheck, setIsRunningRiskCheck] = useState(false);
 
   async function handleImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -54,6 +58,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       const loadedCandles = await getMarketDataCandles(imported.id);
       setDataset(imported);
       setBacktestRun(null);
+      setRiskCheck(null);
       setCandles(
         loadedCandles.map((candle) => ({
           ...candle,
@@ -82,10 +87,34 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
         starting_cash: 10000,
       });
       setBacktestRun(created);
+      setRiskCheck(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run backtest');
     } finally {
       setIsRunningBacktest(false);
+    }
+  }
+
+  async function handleRiskCheck() {
+    if (!selectedStrategy || !backtestRun) {
+      return;
+    }
+
+    setError(null);
+    setIsRunningRiskCheck(true);
+
+    try {
+      const created = await runRiskCheck({
+        strategy_id: selectedStrategy.id,
+        backtest_id: backtestRun.id,
+        paper_mode: true,
+        max_risk_percent: 1,
+      });
+      setRiskCheck(created);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to run broker readiness check');
+    } finally {
+      setIsRunningRiskCheck(false);
     }
   }
 
@@ -175,6 +204,40 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                 <dd>{Math.round(backtestRun.result.win_rate * 100)}%</dd>
               </div>
             </dl>
+          ) : null}
+        </section>
+
+        <section className="backtest-panel" aria-label="Broker readiness controls">
+          <div className="form-heading">
+            <p className="eyebrow">IBKR Safety Gate</p>
+            <h2>Broker readiness</h2>
+            <p>
+              Paper mode is required. This only checks readiness for future broker workflows; it
+              does not place orders.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            disabled={!selectedStrategy || !backtestRun || isRunningRiskCheck}
+            onClick={handleRiskCheck}
+          >
+            {isRunningRiskCheck ? 'Checking readiness…' : 'Run broker readiness check'}
+          </button>
+
+          {!backtestRun ? <p className="muted">Run a backtest before broker readiness.</p> : null}
+
+          {riskCheck ? (
+            <div className={riskCheck.status === 'passed' ? 'success' : 'error'}>
+              <p>Broker readiness {riskCheck.status}</p>
+              <ul>
+                {(riskCheck.status === 'passed' ? riskCheck.checks : riskCheck.failures).map(
+                  (item) => (
+                    <li key={item}>{item}</li>
+                  ),
+                )}
+              </ul>
+            </div>
           ) : null}
         </section>
 

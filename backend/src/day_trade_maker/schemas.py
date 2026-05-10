@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
@@ -132,4 +132,25 @@ class BacktestRun(BaseModel):
     strategy_id: int
     dataset_id: int
     result: BacktestResult
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class RiskCheckCreate(BaseModel):
+    strategy_id: int = Field(gt=0)
+    backtest_id: int = Field(gt=0)
+    paper_mode: bool
+    max_risk_percent: float = Field(gt=0, le=1)
+
+
+class RiskCheckRun(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    strategy_id: int
+    backtest_id: int
+    paper_mode: bool
+    max_risk_percent: float
+    status: Literal["passed", "failed"]
+    checks: list[str]
+    failures: list[str]
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

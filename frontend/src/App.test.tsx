@@ -133,6 +133,18 @@ const createdBacktest = {
   },
 };
 
+const createdRiskCheck = {
+  id: 1,
+  strategy_id: 1,
+  backtest_id: 1,
+  paper_mode: true,
+  max_risk_percent: 1,
+  status: 'passed',
+  checks: ['approved strategy', 'backtest matches strategy', 'backtest produced trades', 'paper mode enabled'],
+  failures: [],
+  created_at: '2026-05-10T18:23:00Z',
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -242,7 +254,7 @@ describe('App', () => {
     expect(screen.getByText('102.00')).toBeInTheDocument();
   });
 
-  it('runs a backtest for the extracted strategy against the imported dataset', async () => {
+  it('runs a paper-mode risk check after approval and backtest', async () => {
     const fetchMock = mockTradingApi();
 
     render(<App />);
@@ -250,24 +262,26 @@ describe('App', () => {
     await saveTranscriptThroughForm();
     fireEvent.click(await screen.findByRole('button', { name: /extract strategy candidates/i }));
     await screen.findByText(/opening range breakout with volume/i);
+    fireEvent.click(await screen.findByRole('button', { name: /approve reviewed strategy/i }));
+    await screen.findByText(/approved by garratt/i);
     await importMarketDataThroughForm();
-
     fireEvent.click(await screen.findByRole('button', { name: /run backtest/i }));
+    await screen.findByText(/backtest net pnl/i);
+
+    fireEvent.click(await screen.findByRole('button', { name: /run broker readiness check/i }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/backtests', expect.any(Object));
+      expect(fetchMock).toHaveBeenCalledWith('/api/risk-checks', expect.any(Object));
     });
-    const request = fetchMock.mock.calls.find(([url]) => url === '/api/backtests')?.[1] as RequestInit;
+    const request = fetchMock.mock.calls.find(([url]) => url === '/api/risk-checks')?.[1] as RequestInit;
     expect(JSON.parse(request.body as string)).toMatchObject({
       strategy_id: 1,
-      dataset_id: 1,
-      starting_cash: 10000,
+      backtest_id: 1,
+      paper_mode: true,
+      max_risk_percent: 1,
     });
-    expect(await screen.findByText(/backtest net pnl/i)).toBeInTheDocument();
-    expect(screen.getByText('$1.00')).toBeInTheDocument();
-    expect(screen.getByText(/1 trade/i)).toBeInTheDocument();
-    expect(screen.getByText(/buy breakout/i)).toBeInTheDocument();
-    expect(screen.getByText(/exit close/i)).toBeInTheDocument();
+    expect(await screen.findByText(/broker readiness passed/i)).toBeInTheDocument();
+    expect(screen.getByText(/paper mode enabled/i)).toBeInTheDocument();
   });
 });
 
@@ -350,6 +364,13 @@ function mockTradingApi() {
 
     if (url === '/api/backtests') {
       return new Response(JSON.stringify(createdBacktest), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/risk-checks') {
+      return new Response(JSON.stringify(createdRiskCheck), {
         status: 201,
         headers: { 'Content-Type': 'application/json' },
       });

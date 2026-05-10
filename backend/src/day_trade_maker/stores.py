@@ -5,6 +5,7 @@ from day_trade_maker.market_data import Candle
 from day_trade_maker.schemas import (
     BacktestRun,
     MarketDataDataset,
+    RiskCheckRun,
     StrategyCandidate,
     Transcript,
     TranscriptCreate,
@@ -105,8 +106,41 @@ class BacktestStore:
         self._backtests.append(saved)
         return saved
 
+    def get(self, backtest_id: int) -> BacktestRun | None:
+        return next((backtest for backtest in self._backtests if backtest.id == backtest_id), None)
+
+
+class RiskCheckStore:
+    def __init__(self) -> None:
+        self._risk_checks: list[RiskCheckRun] = []
+        self._next_id = 1
+
+    def create(
+        self,
+        strategy_id: int,
+        backtest_id: int,
+        paper_mode: bool,
+        max_risk_percent: float,
+        checks: list[str],
+        failures: list[str],
+    ) -> RiskCheckRun:
+        saved = RiskCheckRun(
+            id=self._next_id,
+            strategy_id=strategy_id,
+            backtest_id=backtest_id,
+            paper_mode=paper_mode,
+            max_risk_percent=max_risk_percent,
+            status="failed" if failures else "passed",
+            checks=checks,
+            failures=failures,
+        )
+        self._next_id += 1
+        self._risk_checks.append(saved)
+        return saved
+
 
 transcript_store = TranscriptStore()
 strategy_candidate_store = StrategyCandidateStore()
 market_data_store = MarketDataStore()
 backtest_store = BacktestStore()
+risk_check_store = RiskCheckStore()

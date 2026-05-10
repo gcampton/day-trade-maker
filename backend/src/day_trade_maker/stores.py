@@ -243,6 +243,24 @@ def current_snapshot() -> AuditSnapshot:
     )
 
 
+def reset_all_audit_state() -> AuditSnapshot:
+    transcript_store._transcripts = []
+    transcript_store._next_id = 1
+    strategy_candidate_store._strategies = []
+    strategy_candidate_store._next_id = 1
+    market_data_store._datasets = []
+    market_data_store._next_id = 1
+    backtest_store._backtests = []
+    backtest_store._next_id = 1
+    risk_check_store._risk_checks = []
+    risk_check_store._next_id = 1
+    paper_order_intent_store._order_intents = []
+    paper_order_intent_store._next_id = 1
+    empty_snapshot = current_snapshot()
+    audit_snapshot_repository.save(empty_snapshot)
+    return empty_snapshot
+
+
 def persist_all() -> None:
     if "audit_snapshot_repository" in globals():
         audit_snapshot_repository.save(current_snapshot())

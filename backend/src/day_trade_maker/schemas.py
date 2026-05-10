@@ -249,6 +249,17 @@ class AuditImportSummary(BaseModel):
     message: str
 
 
+class AuditResetRequest(BaseModel):
+    confirmation: str
+
+    @field_validator("confirmation")
+    @classmethod
+    def require_confirmation_phrase(cls, value: str) -> str:
+        if value != "RESET LOCAL AUDIT STATE":
+            raise ValueError("confirmation must be RESET LOCAL AUDIT STATE")
+        return value
+
+
 class AuditPersistenceStatus(BaseModel):
     provider: Literal["sqlite"] = "sqlite"
     db_path: str

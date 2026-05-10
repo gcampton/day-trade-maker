@@ -10,6 +10,7 @@ import {
   getPaperOrderIntents,
   importAuditSnapshot,
   importMarketDataCsv,
+  resetAuditState,
   runBacktest,
   runRiskCheck,
   type AuditImportSummary,
@@ -63,6 +64,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [auditSnapshotJson, setAuditSnapshotJson] = useState('');
   const [auditMessage, setAuditMessage] = useState<string | null>(null);
   const [auditPersistenceStatus, setAuditPersistenceStatus] = useState<AuditPersistenceStatus | null>(null);
+  const [resetConfirmation, setResetConfirmation] = useState('');
   const [orderSymbol, setOrderSymbol] = useState('AAPL');
   const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy');
   const [orderQuantity, setOrderQuantity] = useState('10');
@@ -74,6 +76,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [isCreatingOrderIntent, setIsCreatingOrderIntent] = useState(false);
   const [isExportingAudit, setIsExportingAudit] = useState(false);
   const [isImportingAudit, setIsImportingAudit] = useState(false);
+  const [isResettingAudit, setIsResettingAudit] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -133,6 +136,21 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       setOrderSide(latestOrderIntent.side);
       setOrderQuantity(String(latestOrderIntent.quantity));
     }
+  }
+
+  function clearAuditWorkspace() {
+    setDataset(null);
+    setBacktestRun(null);
+    setRiskCheck(null);
+    setOrderIntent(null);
+    setOrderIntentHistory([]);
+    setAuditSnapshotJson('');
+    setCandles(sampleCandles);
+    setSymbol('AAPL');
+    setTimeframe('5m');
+    setOrderSymbol('AAPL');
+    setOrderSide('buy');
+    setOrderQuantity('10');
   }
 
   async function handleImport(event: FormEvent<HTMLFormElement>) {
@@ -298,6 +316,36 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     }
   }
 
+  async function handleResetAuditState() {
+    setError(null);
+    setAuditMessage(null);
+    setIsResettingAudit(true);
+
+    try {
+      const summary = await resetAuditState(resetConfirmation);
+      clearAuditWorkspace();
+      setResetConfirmation('');
+      setAuditPersistenceStatus((current) =>
+        current
+          ? {
+              ...current,
+              transcript_count: 0,
+              strategy_count: 0,
+              market_data_count: 0,
+              backtest_count: 0,
+              risk_check_count: 0,
+              paper_order_intent_count: 0,
+            }
+          : current,
+      );
+      setAuditMessage(formatAuditResetSummary(summary));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset local audit state');
+    } finally {
+      setIsResettingAudit(false);
+    }
+  }
+
   const backtestMarkers: StrategyMarker[] = backtestRun
     ? backtestRun.result.markers.map((marker) => ({
         ...marker,
@@ -306,6 +354,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     : sampleMarkers;
   const parsedOrderQuantity = Number(orderQuantity);
   const isOrderTicketValid = orderSymbol.trim().length > 0 && Number.isInteger(parsedOrderQuantity) && parsedOrderQuantity > 0;
+  const canResetAuditState = resetConfirmation === 'RESET LOCAL AUDIT STATE';
 
   return (
     <section className="chart-workspace-grid" aria-label="Market data chart workspace">
@@ -403,6 +452,30 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
             </div>
           </dl>
         ) : null}
+
+        <div className="form-heading">
+          <h3>Reset local audit state</h3>
+          <p>
+            This clears persisted local transcripts, strategies, datasets, backtests, risk checks,
+            and audit-only paper order intents. It does not touch broker accounts or submit/cancel
+            IBKR orders.
+          </p>
+        </div>
+        <label>
+          Type RESET LOCAL AUDIT STATE to confirm
+          <input
+            value={resetConfirmation}
+            onChange={(event) => setResetConfirmation(event.target.value)}
+            placeholder="RESET LOCAL AUDIT STATE"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={!canResetAuditState || isResettingAudit}
+          onClick={handleResetAuditState}
+        >
+          {isResettingAudit ? 'Resetting local audit state…' : 'Reset local audit state'}
+        </button>
       </section>
 
       <section className="chart-stack">
@@ -637,4 +710,8 @@ function formatAuditSnapshotMessage(action: string, snapshot: AuditSnapshot): st
 
 function formatAuditImportSummary(summary: AuditImportSummary): string {
   return `Imported audit snapshot with ${summary.transcript_count} transcript and ${summary.paper_order_intent_count} order intent`;
+}
+
+function formatAuditResetSummary(summary: AuditImportSummary): string {
+  return `${summary.message} ${summary.transcript_count} transcript and ${summary.paper_order_intent_count} order intent remain.`;
 }

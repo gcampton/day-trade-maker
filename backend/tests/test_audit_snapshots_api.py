@@ -127,3 +127,30 @@ def test_audit_status_exposes_local_persistence_location_and_counts() -> None:
     assert body["snapshot_exists"] is True
     assert body["transcript_count"] >= 1
     assert body["paper_order_intent_count"] >= 1
+
+
+def test_reset_audit_state_requires_explicit_confirmation_and_clears_artifacts() -> None:
+    client = TestClient(app)
+    create_audited_order_intent(client)
+
+    rejected = client.post("/api/audit/reset", json={"confirmation": "reset"})
+
+    assert rejected.status_code == 422
+    assert client.get("/api/audit/status").json()["transcript_count"] >= 1
+
+    response = client.post(
+        "/api/audit/reset",
+        json={"confirmation": "RESET LOCAL AUDIT STATE"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["transcript_count"] == 0
+    assert body["strategy_count"] == 0
+    assert body["market_data_count"] == 0
+    assert body["backtest_count"] == 0
+    assert body["risk_check_count"] == 0
+    assert body["paper_order_intent_count"] == 0
+    assert body["message"] == "Local audit state reset. No broker orders were touched."
+    assert client.get("/api/audit/export").json()["transcripts"] == []
+    assert client.get("/api/broker/order-intents").json() == []

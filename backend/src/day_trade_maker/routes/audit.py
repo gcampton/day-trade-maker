@@ -1,11 +1,17 @@
 from fastapi import APIRouter
 
-from day_trade_maker.schemas import AuditImportSummary, AuditPersistenceStatus, AuditSnapshot
+from day_trade_maker.schemas import (
+    AuditImportSummary,
+    AuditPersistenceStatus,
+    AuditResetRequest,
+    AuditSnapshot,
+)
 from day_trade_maker.stores import (
     audit_snapshot_repository,
     backtest_store,
     market_data_store,
     paper_order_intent_store,
+    reset_all_audit_state,
     risk_check_store,
     strategy_candidate_store,
     transcript_store,
@@ -57,4 +63,19 @@ def import_audit_snapshot(snapshot: AuditSnapshot) -> AuditImportSummary:
         risk_check_count=len(snapshot.risk_checks),
         paper_order_intent_count=len(snapshot.paper_order_intents),
         message="Audit snapshot imported into in-memory stores.",
+    )
+
+
+@router.post("/reset", response_model=AuditImportSummary)
+def reset_audit_state(_: AuditResetRequest) -> AuditImportSummary:
+    reset_all_audit_state()
+
+    return AuditImportSummary(
+        transcript_count=0,
+        strategy_count=0,
+        market_data_count=0,
+        backtest_count=0,
+        risk_check_count=0,
+        paper_order_intent_count=0,
+        message="Local audit state reset. No broker orders were touched.",
     )

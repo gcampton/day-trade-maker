@@ -210,6 +210,17 @@ const auditImportSummary = {
   message: 'Audit snapshot imported into in-memory stores.',
 };
 
+const auditResetSummary = {
+  version: 1,
+  transcript_count: 0,
+  strategy_count: 0,
+  market_data_count: 0,
+  backtest_count: 0,
+  risk_check_count: 0,
+  paper_order_intent_count: 0,
+  message: 'Local audit state reset. No broker orders were touched.',
+};
+
 const importedMsftAuditSnapshot = {
   ...auditSnapshot,
   market_data: [{ ...importedDataset, symbol: 'MSFT', candles: importedCandles }],
@@ -589,6 +600,30 @@ describe('App', () => {
     expect(await screen.findByText(/imported msft 5m dataset with 2 candles/i)).toBeInTheDocument();
     expect(screen.getByText(/MSFT sell 3/i)).toBeInTheDocument();
   });
+
+  it('requires the reset confirmation phrase before clearing local audit state', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    const resetButton = await screen.findByRole('button', { name: /reset local audit state/i });
+    expect(resetButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/type reset local audit state to confirm/i), {
+      target: { value: 'RESET LOCAL AUDIT STATE' },
+    });
+    fireEvent.click(resetButton);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/audit/reset', expect.any(Object));
+    });
+    const request = fetchMock.mock.calls.find(([url]) => url === '/api/audit/reset')?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toEqual({ confirmation: 'RESET LOCAL AUDIT STATE' });
+    expect(await screen.findByText(/local audit state reset/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/0 transcript/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/0 order intent/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/paper order intent audit log/i)).not.toBeInTheDocument();
+  });
 });
 
 async function saveTranscriptThroughForm() {
@@ -739,6 +774,13 @@ function mockTradingApi() {
 
     if (url === '/api/audit/import') {
       return new Response(JSON.stringify(auditImportSummary), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/audit/reset') {
+      return new Response(JSON.stringify(auditResetSummary), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });

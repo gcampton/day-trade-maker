@@ -383,6 +383,20 @@ export async function getAuditPersistenceStatus(): Promise<AuditPersistenceStatu
   return response.json() as Promise<AuditPersistenceStatus>;
 }
 
+export async function resetAuditState(confirmation: string): Promise<AuditImportSummary> {
+  const response = await fetch('/api/audit/reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmation }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to reset local audit state');
+  }
+
+  return response.json() as Promise<AuditImportSummary>;
+}
+
 export async function importAuditSnapshot(snapshot: AuditSnapshot): Promise<AuditImportSummary> {
   const response = await fetch('/api/audit/import', {
     method: 'POST',

@@ -145,6 +145,18 @@ const createdRiskCheck = {
   created_at: '2026-05-10T18:23:00Z',
 };
 
+const brokerStatus = {
+  provider: 'interactive_brokers',
+  mode: 'paper',
+  connection_status: 'not_connected',
+  read_only: true,
+  order_submission_enabled: false,
+  account_id: null,
+  net_liquidation: null,
+  currency: 'USD',
+  message: 'IBKR read-only scaffold is configured; no broker session is connected.',
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -252,6 +264,23 @@ describe('App', () => {
     expect(await screen.findByText(/imported aapl 5m dataset with 2 candles/i)).toBeInTheDocument();
     expect(screen.getByText(/last close/i)).toBeInTheDocument();
     expect(screen.getByText('102.00')).toBeInTheDocument();
+  });
+
+  it('loads read-only IBKR paper broker status without enabling orders', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/status');
+    });
+    expect(await screen.findByText('Broker')).toBeInTheDocument();
+    expect(screen.getAllByText(/interactive brokers/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/paper mode/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/read-only/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/order submission disabled/i)).toBeInTheDocument();
   });
 
   it('runs a paper-mode risk check after approval and backtest', async () => {
@@ -372,6 +401,13 @@ function mockTradingApi() {
     if (url === '/api/risk-checks') {
       return new Response(JSON.stringify(createdRiskCheck), {
         status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/broker/status') {
+      return new Response(JSON.stringify(brokerStatus), {
+        status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }

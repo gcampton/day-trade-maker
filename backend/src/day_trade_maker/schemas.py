@@ -154,3 +154,26 @@ class RiskCheckRun(BaseModel):
     checks: list[str]
     failures: list[str]
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class BrokerStatus(BaseModel):
+    provider: Literal["interactive_brokers"] = "interactive_brokers"
+    mode: Literal["paper"] = "paper"
+    connection_status: Literal["not_connected", "connected"] = "not_connected"
+    read_only: bool = True
+    order_submission_enabled: bool = False
+    account_id: str | None = None
+    net_liquidation: float | None = None
+    currency: str = "USD"
+    message: str
+
+
+class BrokerAccountSnapshot(BaseModel):
+    provider: Literal["interactive_brokers"] = "interactive_brokers"
+    mode: Literal["paper"] = "paper"
+    read_only: bool = True
+    order_submission_enabled: bool = False
+    account_id: str | None = None
+    balances: list[dict[str, str | float]] = Field(default_factory=list)
+    positions: list[dict[str, str | float]] = Field(default_factory=list)
+    message: str

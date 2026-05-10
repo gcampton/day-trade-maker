@@ -1,11 +1,13 @@
 import { FormEvent, useState } from 'react';
 
 import {
+  getBrokerStatus,
   getMarketDataCandles,
   importMarketDataCsv,
   runBacktest,
   runRiskCheck,
   type BacktestRun,
+  type BrokerStatus,
   type MarketDataDatasetSummary,
   type RiskCheckRun,
   type StrategyCandidate,
@@ -43,10 +45,12 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [dataset, setDataset] = useState<MarketDataDatasetSummary | null>(null);
   const [backtestRun, setBacktestRun] = useState<BacktestRun | null>(null);
   const [riskCheck, setRiskCheck] = useState<RiskCheckRun | null>(null);
+  const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isRunningBacktest, setIsRunningBacktest] = useState(false);
   const [isRunningRiskCheck, setIsRunningRiskCheck] = useState(false);
+  const [isLoadingBrokerStatus, setIsLoadingBrokerStatus] = useState(false);
 
   async function handleImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -115,6 +119,19 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       setError(err instanceof Error ? err.message : 'Failed to run broker readiness check');
     } finally {
       setIsRunningRiskCheck(false);
+    }
+  }
+
+  async function handleBrokerStatus() {
+    setError(null);
+    setIsLoadingBrokerStatus(true);
+
+    try {
+      setBrokerStatus(await getBrokerStatus());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load IBKR broker status');
+    } finally {
+      setIsLoadingBrokerStatus(false);
     }
   }
 
@@ -216,6 +233,39 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
               does not place orders.
             </p>
           </div>
+
+          <button
+            type="button"
+            disabled={isLoadingBrokerStatus}
+            onClick={handleBrokerStatus}
+          >
+            {isLoadingBrokerStatus ? 'Checking IBKR status…' : 'Check IBKR status'}
+          </button>
+
+          {brokerStatus ? (
+            <dl className="backtest-summary">
+              <div>
+                <dt>Broker</dt>
+                <dd>Interactive Brokers</dd>
+              </div>
+              <div>
+                <dt>Mode</dt>
+                <dd>Paper mode</dd>
+              </div>
+              <div>
+                <dt>Access</dt>
+                <dd>{brokerStatus.read_only ? 'Read-only' : 'Writable'}</dd>
+              </div>
+              <div>
+                <dt>Orders</dt>
+                <dd>
+                  {brokerStatus.order_submission_enabled
+                    ? 'Order submission enabled'
+                    : 'Order submission disabled'}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
 
           <button
             type="button"

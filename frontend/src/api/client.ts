@@ -120,6 +120,18 @@ export type RiskCheckRun = RiskCheckCreatePayload & {
   created_at: string;
 };
 
+export type BrokerStatus = {
+  provider: 'interactive_brokers';
+  mode: 'paper';
+  connection_status: 'not_connected' | 'connected';
+  read_only: boolean;
+  order_submission_enabled: boolean;
+  account_id: string | null;
+  net_liquidation: number | null;
+  currency: string;
+  message: string;
+};
+
 export async function createTranscript(payload: TranscriptPayload): Promise<Transcript> {
   const response = await fetch('/api/transcripts', {
     method: 'POST',
@@ -217,4 +229,14 @@ export async function runRiskCheck(payload: RiskCheckCreatePayload): Promise<Ris
   }
 
   return response.json() as Promise<RiskCheckRun>;
+}
+
+export async function getBrokerStatus(): Promise<BrokerStatus> {
+  const response = await fetch('/api/broker/status');
+
+  if (!response.ok) {
+    throw new Error('Failed to load IBKR broker status');
+  }
+
+  return response.json() as Promise<BrokerStatus>;
 }

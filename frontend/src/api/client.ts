@@ -45,6 +45,29 @@ export type StrategyCandidate = {
   created_at: string;
 };
 
+export type MarketDataImportPayload = {
+  symbol: string;
+  timeframe: string;
+  csv_text: string;
+};
+
+export type MarketDataDatasetSummary = {
+  id: number;
+  symbol: string;
+  timeframe: string;
+  candle_count: number;
+  created_at: string;
+};
+
+export type MarketDataCandle = {
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
 export async function createTranscript(payload: TranscriptPayload): Promise<Transcript> {
   const response = await fetch('/api/transcripts', {
     method: 'POST',
@@ -71,4 +94,30 @@ export async function extractStrategyCandidates(
   }
 
   return response.json() as Promise<StrategyCandidate[]>;
+}
+
+export async function importMarketDataCsv(
+  payload: MarketDataImportPayload,
+): Promise<MarketDataDatasetSummary> {
+  const response = await fetch('/api/market-data/import-csv', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to import market data');
+  }
+
+  return response.json() as Promise<MarketDataDatasetSummary>;
+}
+
+export async function getMarketDataCandles(datasetId: number): Promise<MarketDataCandle[]> {
+  const response = await fetch(`/api/market-data/${datasetId}/candles`);
+
+  if (!response.ok) {
+    throw new Error('Failed to load market data candles');
+  }
+
+  return response.json() as Promise<MarketDataCandle[]>;
 }

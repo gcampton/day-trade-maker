@@ -15,6 +15,33 @@ const savedTranscript = {
   created_at: '2026-05-10T18:20:00Z',
 };
 
+const importedDataset = {
+  id: 1,
+  symbol: 'AAPL',
+  timeframe: '5m',
+  candle_count: 2,
+  created_at: '2026-05-10T18:19:00Z',
+};
+
+const importedCandles = [
+  {
+    timestamp: '2026-05-10T14:30:00Z',
+    open: 100,
+    high: 101.5,
+    low: 99.5,
+    close: 101,
+    volume: 150000,
+  },
+  {
+    timestamp: '2026-05-10T14:35:00Z',
+    open: 101,
+    high: 103,
+    low: 100.5,
+    close: 102,
+    volume: 200000,
+  },
+];
+
 const extractedStrategy = {
   id: 1,
   transcript_id: 1,
@@ -131,14 +158,46 @@ describe('App', () => {
     expect(screen.getByText(/risk no more than 1%/i)).toBeInTheDocument();
   });
 
-  it('renders a KLineCharts-ready chart panel with candles and strategy markers', () => {
+  it('imports CSV market data and renders backend candles on the chart', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/market-data/import-csv') {
+        return new Response(JSON.stringify(importedDataset), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url === '/api/market-data/1/candles') {
+        return new Response(JSON.stringify(importedCandles), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: /chart workspace/i })).toBeInTheDocument();
-    expect(screen.getByText(/klinecharts pro ready/i)).toBeInTheDocument();
-    expect(screen.getByText(/sample candles/i)).toBeInTheDocument();
-    expect(screen.getByText(/buy breakout/i)).toBeInTheDocument();
-    expect(screen.getByText(/exit risk/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/market symbol/i), { target: { value: 'AAPL' } });
+    fireEvent.change(screen.getByLabelText(/market timeframe/i), { target: { value: '5m' } });
+    fireEvent.change(screen.getByLabelText(/ohlcv csv/i), {
+      target: {
+        value:
+          'timestamp,open,high,low,close,volume\n' +
+          '2026-05-10T14:30:00Z,100,101.5,99.5,101,150000\n' +
+          '2026-05-10T14:35:00Z,101,103,100.5,102,200000\n',
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /import candles/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/market-data/import-csv', expect.any(Object));
+    });
+    expect(fetchMock).toHaveBeenCalledWith('/api/market-data/1/candles');
+    expect(await screen.findByText(/imported aapl 5m dataset with 2 candles/i)).toBeInTheDocument();
+    expect(screen.getByText(/last close/i)).toBeInTheDocument();
+    expect(screen.getByText('102.00')).toBeInTheDocument();
   });
 });
 

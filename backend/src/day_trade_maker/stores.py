@@ -163,6 +163,9 @@ class PaperOrderIntentStore:
         self._order_intents.append(saved)
         return saved
 
+    def list(self) -> list[PaperOrderIntent]:
+        return list(self._order_intents)
+
 
 transcript_store = TranscriptStore()
 strategy_candidate_store = StrategyCandidateStore()

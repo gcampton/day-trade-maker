@@ -278,3 +278,13 @@ export async function createPaperOrderIntent(
 
   return response.json() as Promise<PaperOrderIntent>;
 }
+
+export async function getPaperOrderIntents(): Promise<PaperOrderIntent[]> {
+  const response = await fetch('/api/broker/order-intents');
+
+  if (!response.ok) {
+    throw new Error('Failed to load paper order intent history');
+  }
+
+  return response.json() as Promise<PaperOrderIntent[]>;
+}

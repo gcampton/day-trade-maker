@@ -176,6 +176,8 @@ const createdOrderIntent = {
   created_at: '2026-05-10T18:24:00Z',
 };
 
+const orderIntentHistory = [createdOrderIntent];
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -357,8 +359,11 @@ describe('App', () => {
       user_confirmed: true,
     });
     expect(await screen.findByText(/paper order intent recorded/i)).toBeInTheDocument();
-    expect(screen.getByText(/no ibkr order was submitted/i)).toBeInTheDocument();
-    expect(screen.getByText(/created_not_submitted/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/no ibkr order was submitted/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/created_not_submitted/i).length).toBeGreaterThan(0);
+    expect(fetchMock).toHaveBeenCalledWith('/api/broker/order-intents');
+    expect(screen.getByText(/paper order intent audit log/i)).toBeInTheDocument();
+    expect(screen.getByText(/AAPL buy 10/i)).toBeInTheDocument();
   });
 
   it('uses editable paper order ticket values when recording an intent', async () => {
@@ -454,7 +459,7 @@ async function reachPassedBrokerReadiness() {
 }
 
 function mockTradingApi() {
-  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
     if (url === '/api/transcripts') {
       return new Response(JSON.stringify(savedTranscript), {
         status: 201,
@@ -511,9 +516,16 @@ function mockTradingApi() {
       });
     }
 
-    if (url === '/api/broker/order-intents') {
+    if (url === '/api/broker/order-intents' && init?.method === 'POST') {
       return new Response(JSON.stringify(createdOrderIntent), {
         status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/broker/order-intents') {
+      return new Response(JSON.stringify(orderIntentHistory), {
+        status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }

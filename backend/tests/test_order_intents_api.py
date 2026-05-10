@@ -137,3 +137,44 @@ def test_order_intent_rejects_unknown_or_failed_safety_gate() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Risk check not found"
+
+
+def test_list_order_intents_returns_audit_history_without_broker_submission() -> None:
+    client = TestClient(app)
+    strategy_id, risk_check_id = create_approved_strategy_backtest_and_risk_check(client)
+    client.post(
+        "/api/broker/order-intents",
+        json={
+            "strategy_id": strategy_id,
+            "risk_check_id": risk_check_id,
+            "symbol": "AAPL",
+            "side": "buy",
+            "quantity": 10,
+            "order_type": "market",
+            "paper_mode": True,
+            "user_confirmed": True,
+        },
+    )
+    client.post(
+        "/api/broker/order-intents",
+        json={
+            "strategy_id": strategy_id,
+            "risk_check_id": risk_check_id,
+            "symbol": "TSLA",
+            "side": "sell",
+            "quantity": 3,
+            "order_type": "market",
+            "paper_mode": True,
+            "user_confirmed": True,
+        },
+    )
+
+    response = client.get("/api/broker/order-intents")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) >= 2
+    assert body[-2]["symbol"] == "AAPL"
+    assert body[-1]["symbol"] == "TSLA"
+    assert body[-1]["submitted_to_broker"] is False
+    assert body[-1]["order_submission_enabled"] is False

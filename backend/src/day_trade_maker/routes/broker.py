@@ -15,6 +15,11 @@ from day_trade_maker.stores import (
 router = APIRouter(prefix="/api/broker", tags=["broker"])
 
 
+@router.get("/order-intents", response_model=list[PaperOrderIntent])
+def list_paper_order_intents() -> list[PaperOrderIntent]:
+    return paper_order_intent_store.list()
+
+
 @router.get("/status", response_model=BrokerStatus)
 def get_broker_status() -> BrokerStatus:
     return BrokerStatus(

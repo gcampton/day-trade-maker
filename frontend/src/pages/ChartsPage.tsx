@@ -4,6 +4,7 @@ import {
   createPaperOrderIntent,
   getBrokerStatus,
   getMarketDataCandles,
+  getPaperOrderIntents,
   importMarketDataCsv,
   runBacktest,
   runRiskCheck,
@@ -49,6 +50,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [riskCheck, setRiskCheck] = useState<RiskCheckRun | null>(null);
   const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | null>(null);
   const [orderIntent, setOrderIntent] = useState<PaperOrderIntent | null>(null);
+  const [orderIntentHistory, setOrderIntentHistory] = useState<PaperOrderIntent[]>([]);
   const [orderSymbol, setOrderSymbol] = useState('AAPL');
   const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy');
   const [orderQuantity, setOrderQuantity] = useState('10');
@@ -71,6 +73,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       setBacktestRun(null);
       setRiskCheck(null);
       setOrderIntent(null);
+      setOrderIntentHistory([]);
       setCandles(
         loadedCandles.map((candle) => ({
           ...candle,
@@ -101,6 +104,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       setBacktestRun(created);
       setRiskCheck(null);
       setOrderIntent(null);
+      setOrderIntentHistory([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run backtest');
     } finally {
@@ -125,6 +129,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       });
       setRiskCheck(created);
       setOrderIntent(null);
+      setOrderIntentHistory([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run broker readiness check');
     } finally {
@@ -162,18 +167,18 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     setIsCreatingOrderIntent(true);
 
     try {
-      setOrderIntent(
-        await createPaperOrderIntent({
-          strategy_id: selectedStrategy.id,
-          risk_check_id: riskCheck.id,
-          symbol: orderSymbol,
-          side: orderSide,
-          quantity,
-          order_type: 'market',
-          paper_mode: true,
-          user_confirmed: true,
-        }),
-      );
+      const created = await createPaperOrderIntent({
+        strategy_id: selectedStrategy.id,
+        risk_check_id: riskCheck.id,
+        symbol: orderSymbol,
+        side: orderSide,
+        quantity,
+        order_type: 'market',
+        paper_mode: true,
+        user_confirmed: true,
+      });
+      setOrderIntent(created);
+      setOrderIntentHistory(await getPaperOrderIntents());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to record paper order intent');
     } finally {
@@ -402,6 +407,20 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                 </div>
               </dl>
             </div>
+          ) : null}
+
+          {orderIntentHistory.length > 0 ? (
+            <section aria-label="Paper order intent audit log">
+              <h3>Paper order intent audit log</h3>
+              <ul>
+                {orderIntentHistory.map((intent) => (
+                  <li key={intent.id}>
+                    {intent.symbol} {intent.side} {intent.quantity} — {intent.status}; no IBKR order
+                    was submitted
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
         </section>
 

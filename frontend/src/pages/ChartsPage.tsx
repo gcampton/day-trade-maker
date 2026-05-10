@@ -282,6 +282,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     try {
       const snapshot = JSON.parse(auditSnapshotJson) as AuditSnapshot;
       const summary = await importAuditSnapshot(snapshot);
+      applyAuditSnapshotToWorkspace(snapshot);
       setAuditMessage(formatAuditImportSummary(summary));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import audit snapshot');

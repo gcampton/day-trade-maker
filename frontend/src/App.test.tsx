@@ -210,6 +210,12 @@ const auditImportSummary = {
   message: 'Audit snapshot imported into in-memory stores.',
 };
 
+const importedMsftAuditSnapshot = {
+  ...auditSnapshot,
+  market_data: [{ ...importedDataset, symbol: 'MSFT', candles: importedCandles }],
+  paper_order_intents: [{ ...createdOrderIntent, symbol: 'MSFT', side: 'sell', quantity: 3 }],
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -540,6 +546,20 @@ describe('App', () => {
       paper_order_intents: [{ symbol: 'AAPL', submitted_to_broker: false }],
     });
     expect(await screen.findByText(/imported audit snapshot with 1 transcript and 1 order intent/i)).toBeInTheDocument();
+  });
+
+  it('refreshes the visible workspace after importing a different audit snapshot', async () => {
+    mockTradingApi();
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText(/audit snapshot json/i), {
+      target: { value: JSON.stringify(importedMsftAuditSnapshot) },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /import audit snapshot/i }));
+
+    expect(await screen.findByText(/imported msft 5m dataset with 2 candles/i)).toBeInTheDocument();
+    expect(screen.getByText(/MSFT sell 3/i)).toBeInTheDocument();
   });
 });
 

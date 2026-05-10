@@ -5,6 +5,7 @@ import './styles.css';
 import { StrategyExtractionPanel } from './components/StrategyExtractionPanel';
 import { TranscriptForm } from './components/TranscriptForm';
 import type { Transcript } from './api/client';
+import { ChartsPage } from './pages/ChartsPage';
 
 export function App() {
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
@@ -25,6 +26,8 @@ export function App() {
         <TranscriptForm onSaved={setSelectedTranscript} />
         <StrategyExtractionPanel transcript={selectedTranscript} />
       </div>
+
+      <ChartsPage />
 
       <section className="dashboard-grid" aria-label="Dashboard sections">
         <article>

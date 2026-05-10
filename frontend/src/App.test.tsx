@@ -130,6 +130,16 @@ describe('App', () => {
     expect(screen.getAllByText(/candidate/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/risk no more than 1%/i)).toBeInTheDocument();
   });
+
+  it('renders a KLineCharts-ready chart panel with candles and strategy markers', () => {
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: /chart workspace/i })).toBeInTheDocument();
+    expect(screen.getByText(/klinecharts pro ready/i)).toBeInTheDocument();
+    expect(screen.getByText(/sample candles/i)).toBeInTheDocument();
+    expect(screen.getByText(/buy breakout/i)).toBeInTheDocument();
+    expect(screen.getByText(/exit risk/i)).toBeInTheDocument();
+  });
 });
 
 async function saveTranscriptThroughForm() {

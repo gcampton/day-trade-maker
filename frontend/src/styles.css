@@ -27,6 +27,7 @@ body {
 .hero-panel,
 .transcript-form,
 .strategy-panel,
+.chart-panel,
 .dashboard-grid article {
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 24px;
@@ -217,6 +218,104 @@ blockquote {
   border-left: 3px solid #67e8f9;
   padding-left: 0.8rem;
   color: #cbd5e1;
+}
+
+.chart-panel {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
+}
+
+.chart-panel-header {
+  display: flex;
+  gap: 1rem;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.chart-stat {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 110px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 16px;
+  padding: 0.85rem;
+  text-align: right;
+}
+
+.chart-stat span {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.chart-stat strong {
+  font-size: 1.75rem;
+}
+
+.chart-canvas-placeholder {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(28px, 1fr));
+  gap: 0.75rem;
+  align-items: start;
+  min-height: 280px;
+  border: 1px solid rgba(103, 232, 249, 0.18);
+  border-radius: 18px;
+  padding: 1rem;
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    rgba(2, 6, 23, 0.48);
+  background-size: 100% 25%, 12.5% 100%, auto;
+}
+
+.candle {
+  display: block;
+  width: 46%;
+  min-height: 18px;
+  margin-inline: auto;
+  border-radius: 999px;
+}
+
+.candle-up {
+  background: #22c55e;
+  box-shadow: 0 0 18px rgba(34, 197, 94, 0.28);
+}
+
+.candle-down {
+  background: #ef4444;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.28);
+}
+
+.chart-summary {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.marker-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.marker {
+  border-radius: 999px;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.marker-buy {
+  color: #04111f;
+  background: #86efac;
+}
+
+.marker-exit,
+.marker-sell,
+.marker-warning {
+  color: #04111f;
+  background: #fbbf24;
 }
 
 .dashboard-grid {

@@ -1,4 +1,10 @@
-from day_trade_maker.schemas import StrategyCandidate, Transcript, TranscriptCreate
+from day_trade_maker.market_data import Candle
+from day_trade_maker.schemas import (
+    MarketDataDataset,
+    StrategyCandidate,
+    Transcript,
+    TranscriptCreate,
+)
 from day_trade_maker.strategy_spec import StrategySpec
 
 
@@ -38,5 +44,26 @@ class StrategyCandidateStore:
         return list(self._strategies)
 
 
+class MarketDataStore:
+    def __init__(self) -> None:
+        self._datasets: list[MarketDataDataset] = []
+        self._next_id = 1
+
+    def create(self, symbol: str, timeframe: str, candles: list[Candle]) -> MarketDataDataset:
+        saved = MarketDataDataset(
+            id=self._next_id,
+            symbol=symbol,
+            timeframe=timeframe,
+            candles=candles,
+        )
+        self._next_id += 1
+        self._datasets.append(saved)
+        return saved
+
+    def get(self, dataset_id: int) -> MarketDataDataset | None:
+        return next((dataset for dataset in self._datasets if dataset.id == dataset_id), None)
+
+
 transcript_store = TranscriptStore()
 strategy_candidate_store = StrategyCandidateStore()
+market_data_store = MarketDataStore()

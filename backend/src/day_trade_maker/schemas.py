@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+from day_trade_maker.market_data import Candle
 from day_trade_maker.strategy_spec import StrategySpec
 
 NonEmptyString = Annotated[str, Field(min_length=1)]
@@ -50,3 +51,52 @@ class StrategyCandidate(BaseModel):
     spec: StrategySpec
     status: str = "candidate"
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class MarketDataImport(BaseModel):
+    symbol: NonEmptyString
+    timeframe: NonEmptyString
+    csv_text: NonEmptyString
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("timeframe", "csv_text")
+    @classmethod
+    def reject_blank_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be blank")
+        return stripped
+
+
+class MarketDataDataset(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    symbol: str
+    timeframe: str
+    candles: list[Candle]
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @property
+    def candle_count(self) -> int:
+        return len(self.candles)
+
+
+class MarketDataDatasetSummary(BaseModel):
+    id: int
+    symbol: str
+    timeframe: str
+    candle_count: int
+    created_at: datetime
+
+
+class CandleResponse(Candle):
+    @field_serializer("timestamp")
+    def serialize_timestamp(self, value: datetime) -> str:
+        if value.tzinfo is None:
+            return value.isoformat()
+        return value.isoformat().replace("+00:00", "Z")

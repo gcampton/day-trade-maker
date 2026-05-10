@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 
 import {
+  createPaperOrderIntent,
   getBrokerStatus,
   getMarketDataCandles,
   importMarketDataCsv,
@@ -9,6 +10,7 @@ import {
   type BacktestRun,
   type BrokerStatus,
   type MarketDataDatasetSummary,
+  type PaperOrderIntent,
   type RiskCheckRun,
   type StrategyCandidate,
 } from '../api/client';
@@ -46,11 +48,13 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [backtestRun, setBacktestRun] = useState<BacktestRun | null>(null);
   const [riskCheck, setRiskCheck] = useState<RiskCheckRun | null>(null);
   const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | null>(null);
+  const [orderIntent, setOrderIntent] = useState<PaperOrderIntent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isRunningBacktest, setIsRunningBacktest] = useState(false);
   const [isRunningRiskCheck, setIsRunningRiskCheck] = useState(false);
   const [isLoadingBrokerStatus, setIsLoadingBrokerStatus] = useState(false);
+  const [isCreatingOrderIntent, setIsCreatingOrderIntent] = useState(false);
 
   async function handleImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,6 +67,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       setDataset(imported);
       setBacktestRun(null);
       setRiskCheck(null);
+      setOrderIntent(null);
       setCandles(
         loadedCandles.map((candle) => ({
           ...candle,
@@ -92,6 +97,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       });
       setBacktestRun(created);
       setRiskCheck(null);
+      setOrderIntent(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run backtest');
     } finally {
@@ -115,6 +121,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
         max_risk_percent: 1,
       });
       setRiskCheck(created);
+      setOrderIntent(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run broker readiness check');
     } finally {
@@ -132,6 +139,34 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       setError(err instanceof Error ? err.message : 'Failed to load IBKR broker status');
     } finally {
       setIsLoadingBrokerStatus(false);
+    }
+  }
+
+  async function handleCreateOrderIntent() {
+    if (!selectedStrategy || !riskCheck || riskCheck.status !== 'passed') {
+      return;
+    }
+
+    setError(null);
+    setIsCreatingOrderIntent(true);
+
+    try {
+      setOrderIntent(
+        await createPaperOrderIntent({
+          strategy_id: selectedStrategy.id,
+          risk_check_id: riskCheck.id,
+          symbol: selectedStrategy.spec.symbols[0] ?? symbol,
+          side: 'buy',
+          quantity: 10,
+          order_type: 'market',
+          paper_mode: true,
+          user_confirmed: true,
+        }),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to record paper order intent');
+    } finally {
+      setIsCreatingOrderIntent(false);
     }
   }
 
@@ -287,6 +322,40 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                   ),
                 )}
               </ul>
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            disabled={riskCheck?.status !== 'passed' || isCreatingOrderIntent}
+            onClick={handleCreateOrderIntent}
+          >
+            {isCreatingOrderIntent ? 'Recording paper order intent…' : 'Record paper order intent'}
+          </button>
+          <p className="muted">
+            This records an explicit paper-mode order intent for audit only; it does not submit to
+            IBKR.
+          </p>
+
+          {orderIntent ? (
+            <div className="success">
+              <p>Paper order intent recorded</p>
+              <dl className="backtest-summary">
+                <div>
+                  <dt>Status</dt>
+                  <dd>{orderIntent.status}</dd>
+                </div>
+                <div>
+                  <dt>Quantity</dt>
+                  <dd>
+                    {orderIntent.quantity} {orderIntent.symbol}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Broker submission</dt>
+                  <dd>{orderIntent.submitted_to_broker ? 'Submitted' : 'No IBKR order was submitted'}</dd>
+                </div>
+              </dl>
             </div>
           ) : null}
         </section>

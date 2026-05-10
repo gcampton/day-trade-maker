@@ -5,6 +5,8 @@ from day_trade_maker.market_data import Candle
 from day_trade_maker.schemas import (
     BacktestRun,
     MarketDataDataset,
+    PaperOrderIntent,
+    PaperOrderIntentCreate,
     RiskCheckRun,
     StrategyCandidate,
     Transcript,
@@ -138,9 +140,33 @@ class RiskCheckStore:
         self._risk_checks.append(saved)
         return saved
 
+    def get(self, risk_check_id: int) -> RiskCheckRun | None:
+        return next(
+            (risk_check for risk_check in self._risk_checks if risk_check.id == risk_check_id),
+            None,
+        )
+
+
+class PaperOrderIntentStore:
+    def __init__(self) -> None:
+        self._order_intents: list[PaperOrderIntent] = []
+        self._next_id = 1
+
+    def create(self, payload: PaperOrderIntentCreate, checks: list[str]) -> PaperOrderIntent:
+        saved = PaperOrderIntent(
+            id=self._next_id,
+            **payload.model_dump(),
+            checks=checks,
+            message="Paper order intent recorded for audit only; no IBKR order was submitted.",
+        )
+        self._next_id += 1
+        self._order_intents.append(saved)
+        return saved
+
 
 transcript_store = TranscriptStore()
 strategy_candidate_store = StrategyCandidateStore()
 market_data_store = MarketDataStore()
 backtest_store = BacktestStore()
 risk_check_store = RiskCheckStore()
+paper_order_intent_store = PaperOrderIntentStore()

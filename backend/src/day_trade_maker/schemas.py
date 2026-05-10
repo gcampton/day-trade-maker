@@ -177,3 +177,41 @@ class BrokerAccountSnapshot(BaseModel):
     balances: list[dict[str, str | float]] = Field(default_factory=list)
     positions: list[dict[str, str | float]] = Field(default_factory=list)
     message: str
+
+
+class PaperOrderIntentCreate(BaseModel):
+    strategy_id: int = Field(gt=0)
+    risk_check_id: int = Field(gt=0)
+    symbol: NonEmptyString
+    side: Literal["buy", "sell"]
+    quantity: int = Field(gt=0)
+    order_type: Literal["market", "limit"]
+    limit_price: float | None = Field(default=None, gt=0)
+    paper_mode: bool
+    user_confirmed: bool
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+
+class PaperOrderIntent(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    strategy_id: int
+    risk_check_id: int
+    symbol: str
+    side: Literal["buy", "sell"]
+    quantity: int
+    order_type: Literal["market", "limit"]
+    limit_price: float | None = None
+    paper_mode: bool
+    user_confirmed: bool
+    status: Literal["created_not_submitted"] = "created_not_submitted"
+    submitted_to_broker: bool = False
+    order_submission_enabled: bool = False
+    checks: list[str]
+    message: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

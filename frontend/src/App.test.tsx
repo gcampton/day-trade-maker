@@ -157,6 +157,25 @@ const brokerStatus = {
   message: 'IBKR read-only scaffold is configured; no broker session is connected.',
 };
 
+const createdOrderIntent = {
+  id: 1,
+  strategy_id: 1,
+  risk_check_id: 1,
+  symbol: 'AAPL',
+  side: 'buy',
+  quantity: 10,
+  order_type: 'market',
+  limit_price: null,
+  paper_mode: true,
+  user_confirmed: true,
+  status: 'created_not_submitted',
+  submitted_to_broker: false,
+  order_submission_enabled: false,
+  checks: ['approved strategy', 'passed risk check', 'paper mode enabled', 'explicit user confirmation'],
+  message: 'Paper order intent recorded for audit only; no IBKR order was submitted.',
+  created_at: '2026-05-10T18:24:00Z',
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -312,6 +331,44 @@ describe('App', () => {
     expect(await screen.findByText(/broker readiness passed/i)).toBeInTheDocument();
     expect(screen.getByText(/paper mode enabled/i)).toBeInTheDocument();
   });
+
+  it('records a paper order intent only after readiness passed and explicit confirmation', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    await saveTranscriptThroughForm();
+    fireEvent.click(await screen.findByRole('button', { name: /extract strategy candidates/i }));
+    await screen.findByText(/opening range breakout with volume/i);
+    fireEvent.click(await screen.findByRole('button', { name: /approve reviewed strategy/i }));
+    await screen.findByText(/approved by garratt/i);
+    await importMarketDataThroughForm();
+    fireEvent.click(await screen.findByRole('button', { name: /run backtest/i }));
+    await screen.findByText(/backtest net pnl/i);
+    fireEvent.click(await screen.findByRole('button', { name: /run broker readiness check/i }));
+    await screen.findByText(/broker readiness passed/i);
+
+    fireEvent.click(await screen.findByRole('button', { name: /record paper order intent/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/order-intents', expect.any(Object));
+    });
+    const request = fetchMock.mock.calls.find(([url]) => url === '/api/broker/order-intents')
+      ?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      strategy_id: 1,
+      risk_check_id: 1,
+      symbol: 'AAPL',
+      side: 'buy',
+      quantity: 10,
+      order_type: 'market',
+      paper_mode: true,
+      user_confirmed: true,
+    });
+    expect(await screen.findByText(/paper order intent recorded/i)).toBeInTheDocument();
+    expect(screen.getByText(/no ibkr order was submitted/i)).toBeInTheDocument();
+    expect(screen.getByText(/created_not_submitted/i)).toBeInTheDocument();
+  });
 });
 
 async function saveTranscriptThroughForm() {
@@ -408,6 +465,13 @@ function mockTradingApi() {
     if (url === '/api/broker/status') {
       return new Response(JSON.stringify(brokerStatus), {
         status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/broker/order-intents') {
+      return new Response(JSON.stringify(createdOrderIntent), {
+        status: 201,
         headers: { 'Content-Type': 'application/json' },
       });
     }

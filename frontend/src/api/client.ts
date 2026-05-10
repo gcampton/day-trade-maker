@@ -132,6 +132,28 @@ export type BrokerStatus = {
   message: string;
 };
 
+export type PaperOrderIntentCreatePayload = {
+  strategy_id: number;
+  risk_check_id: number;
+  symbol: string;
+  side: 'buy' | 'sell';
+  quantity: number;
+  order_type: 'market' | 'limit';
+  limit_price?: number | null;
+  paper_mode: boolean;
+  user_confirmed: boolean;
+};
+
+export type PaperOrderIntent = PaperOrderIntentCreatePayload & {
+  id: number;
+  status: 'created_not_submitted';
+  submitted_to_broker: boolean;
+  order_submission_enabled: boolean;
+  checks: string[];
+  message: string;
+  created_at: string;
+};
+
 export async function createTranscript(payload: TranscriptPayload): Promise<Transcript> {
   const response = await fetch('/api/transcripts', {
     method: 'POST',
@@ -239,4 +261,20 @@ export async function getBrokerStatus(): Promise<BrokerStatus> {
   }
 
   return response.json() as Promise<BrokerStatus>;
+}
+
+export async function createPaperOrderIntent(
+  payload: PaperOrderIntentCreatePayload,
+): Promise<PaperOrderIntent> {
+  const response = await fetch('/api/broker/order-intents', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to record paper order intent');
+  }
+
+  return response.json() as Promise<PaperOrderIntent>;
 }

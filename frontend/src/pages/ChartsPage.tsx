@@ -49,6 +49,9 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [riskCheck, setRiskCheck] = useState<RiskCheckRun | null>(null);
   const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | null>(null);
   const [orderIntent, setOrderIntent] = useState<PaperOrderIntent | null>(null);
+  const [orderSymbol, setOrderSymbol] = useState('AAPL');
+  const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy');
+  const [orderQuantity, setOrderQuantity] = useState('10');
   const [error, setError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isRunningBacktest, setIsRunningBacktest] = useState(false);
@@ -143,7 +146,15 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   }
 
   async function handleCreateOrderIntent() {
-    if (!selectedStrategy || !riskCheck || riskCheck.status !== 'passed') {
+    const quantity = Number(orderQuantity);
+    if (
+      !selectedStrategy ||
+      !riskCheck ||
+      riskCheck.status !== 'passed' ||
+      !orderSymbol.trim() ||
+      !Number.isInteger(quantity) ||
+      quantity <= 0
+    ) {
       return;
     }
 
@@ -155,9 +166,9 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
         await createPaperOrderIntent({
           strategy_id: selectedStrategy.id,
           risk_check_id: riskCheck.id,
-          symbol: selectedStrategy.spec.symbols[0] ?? symbol,
-          side: 'buy',
-          quantity: 10,
+          symbol: orderSymbol,
+          side: orderSide,
+          quantity,
           order_type: 'market',
           paper_mode: true,
           user_confirmed: true,
@@ -176,6 +187,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
         timestamp: Date.parse(marker.timestamp),
       }))
     : sampleMarkers;
+  const parsedOrderQuantity = Number(orderQuantity);
+  const isOrderTicketValid = orderSymbol.trim().length > 0 && Number.isInteger(parsedOrderQuantity) && parsedOrderQuantity > 0;
 
   return (
     <section className="chart-workspace-grid" aria-label="Market data chart workspace">
@@ -325,9 +338,41 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
             </div>
           ) : null}
 
+          <div className="form-row">
+            <label>
+              Order symbol
+              <input
+                value={orderSymbol}
+                onChange={(event) => setOrderSymbol(event.target.value.toUpperCase())}
+                required
+              />
+            </label>
+            <label>
+              Order side
+              <select
+                value={orderSide}
+                onChange={(event) => setOrderSide(event.target.value as 'buy' | 'sell')}
+              >
+                <option value="buy">Buy</option>
+                <option value="sell">Sell</option>
+              </select>
+            </label>
+            <label>
+              Order quantity
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={orderQuantity}
+                onChange={(event) => setOrderQuantity(event.target.value)}
+                required
+              />
+            </label>
+          </div>
+
           <button
             type="button"
-            disabled={riskCheck?.status !== 'passed' || isCreatingOrderIntent}
+            disabled={riskCheck?.status !== 'passed' || !isOrderTicketValid || isCreatingOrderIntent}
             onClick={handleCreateOrderIntent}
           >
             {isCreatingOrderIntent ? 'Recording paper order intent…' : 'Record paper order intent'}

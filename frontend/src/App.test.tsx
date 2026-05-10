@@ -337,16 +337,7 @@ describe('App', () => {
 
     render(<App />);
 
-    await saveTranscriptThroughForm();
-    fireEvent.click(await screen.findByRole('button', { name: /extract strategy candidates/i }));
-    await screen.findByText(/opening range breakout with volume/i);
-    fireEvent.click(await screen.findByRole('button', { name: /approve reviewed strategy/i }));
-    await screen.findByText(/approved by garratt/i);
-    await importMarketDataThroughForm();
-    fireEvent.click(await screen.findByRole('button', { name: /run backtest/i }));
-    await screen.findByText(/backtest net pnl/i);
-    fireEvent.click(await screen.findByRole('button', { name: /run broker readiness check/i }));
-    await screen.findByText(/broker readiness passed/i);
+    await reachPassedBrokerReadiness();
 
     fireEvent.click(await screen.findByRole('button', { name: /record paper order intent/i }));
 
@@ -368,6 +359,44 @@ describe('App', () => {
     expect(await screen.findByText(/paper order intent recorded/i)).toBeInTheDocument();
     expect(screen.getByText(/no ibkr order was submitted/i)).toBeInTheDocument();
     expect(screen.getByText(/created_not_submitted/i)).toBeInTheDocument();
+  });
+
+  it('uses editable paper order ticket values when recording an intent', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    await reachPassedBrokerReadiness();
+    fireEvent.change(await screen.findByLabelText(/order symbol/i), { target: { value: 'TSLA' } });
+    fireEvent.change(screen.getByLabelText(/order side/i), { target: { value: 'sell' } });
+    fireEvent.change(screen.getByLabelText(/order quantity/i), { target: { value: '3' } });
+
+    fireEvent.click(await screen.findByRole('button', { name: /record paper order intent/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/order-intents', expect.any(Object));
+    });
+    const request = fetchMock.mock.calls.find(([url]) => url === '/api/broker/order-intents')
+      ?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      symbol: 'TSLA',
+      side: 'sell',
+      quantity: 3,
+      order_type: 'market',
+      paper_mode: true,
+      user_confirmed: true,
+    });
+  });
+
+  it('keeps the paper order intent action disabled for invalid quantity', async () => {
+    mockTradingApi();
+
+    render(<App />);
+
+    await reachPassedBrokerReadiness();
+    fireEvent.change(await screen.findByLabelText(/order quantity/i), { target: { value: '0' } });
+
+    expect(screen.getByRole('button', { name: /record paper order intent/i })).toBeDisabled();
   });
 });
 
@@ -409,6 +438,19 @@ async function importMarketDataThroughForm() {
   fireEvent.click(screen.getByRole('button', { name: /import candles/i }));
 
   await screen.findByText(/imported aapl 5m dataset with 2 candles/i);
+}
+
+async function reachPassedBrokerReadiness() {
+  await saveTranscriptThroughForm();
+  fireEvent.click(await screen.findByRole('button', { name: /extract strategy candidates/i }));
+  await screen.findByText(/opening range breakout with volume/i);
+  fireEvent.click(await screen.findByRole('button', { name: /approve reviewed strategy/i }));
+  await screen.findByText(/approved by garratt/i);
+  await importMarketDataThroughForm();
+  fireEvent.click(await screen.findByRole('button', { name: /run backtest/i }));
+  await screen.findByText(/backtest net pnl/i);
+  fireEvent.click(await screen.findByRole('button', { name: /run broker readiness check/i }));
+  await screen.findByText(/broker readiness passed/i);
 }
 
 function mockTradingApi() {

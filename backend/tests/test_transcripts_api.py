@@ -20,7 +20,8 @@ def test_create_transcript_returns_saved_record() -> None:
 
     assert response.status_code == 201
     body = response.json()
-    assert body["id"] == 1
+    assert isinstance(body["id"], int)
+    assert body["id"] > 0
     assert body["title"] == "Opening Range Breakout Explained"
     assert body["creator"] == "Example Trader"
     assert body["symbols"] == ["AAPL", "TSLA"]

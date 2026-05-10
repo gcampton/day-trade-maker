@@ -3,6 +3,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from day_trade_maker.strategy_spec import StrategySpec
+
 NonEmptyString = Annotated[str, Field(min_length=1)]
 
 
@@ -37,4 +39,14 @@ class Transcript(TranscriptCreate):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class StrategyCandidate(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    transcript_id: int
+    spec: StrategySpec
+    status: str = "candidate"
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

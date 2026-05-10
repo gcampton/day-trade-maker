@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 
 import {
   createPaperOrderIntent,
@@ -71,6 +71,62 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [isCreatingOrderIntent, setIsCreatingOrderIntent] = useState(false);
   const [isExportingAudit, setIsExportingAudit] = useState(false);
   const [isImportingAudit, setIsImportingAudit] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function restoreWorkflowState() {
+      try {
+        const snapshot = await exportAuditSnapshot();
+        if (!isMounted) {
+          return;
+        }
+        applyAuditSnapshotToWorkspace(snapshot);
+      } catch {
+        // Startup restore is best-effort so the chart workspace still works before API startup.
+      }
+    }
+
+    void restoreWorkflowState();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  function applyAuditSnapshotToWorkspace(snapshot: AuditSnapshot) {
+    const latestDataset = snapshot.market_data.at(-1);
+    if (latestDataset) {
+      setDataset(latestDataset);
+      setSymbol(latestDataset.symbol);
+      setTimeframe(latestDataset.timeframe);
+      setCandles(
+        latestDataset.candles.map((candle) => ({
+          ...candle,
+          timestamp: Date.parse(candle.timestamp),
+        })),
+      );
+    }
+
+    const latestBacktest = snapshot.backtests.at(-1);
+    if (latestBacktest) {
+      setBacktestRun(latestBacktest);
+    }
+
+    const latestRiskCheck = snapshot.risk_checks.at(-1);
+    if (latestRiskCheck) {
+      setRiskCheck(latestRiskCheck);
+    }
+
+    setOrderIntentHistory(snapshot.paper_order_intents);
+    const latestOrderIntent = snapshot.paper_order_intents.at(-1);
+    if (latestOrderIntent) {
+      setOrderIntent(latestOrderIntent);
+      setOrderSymbol(latestOrderIntent.symbol);
+      setOrderSide(latestOrderIntent.side);
+      setOrderQuantity(String(latestOrderIntent.quantity));
+    }
+  }
 
   async function handleImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

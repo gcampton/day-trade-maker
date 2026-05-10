@@ -253,6 +253,21 @@ describe('App', () => {
     expect(screen.getByText(/approved by garratt/i)).toBeInTheDocument();
   });
 
+  it('restores persisted chart and broker workflow state on startup', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/audit/export');
+    });
+    expect(await screen.findByText(/imported aapl 5m dataset with 2 candles/i)).toBeInTheDocument();
+    expect(screen.getByText(/backtest net pnl/i)).toBeInTheDocument();
+    expect(screen.getByText(/broker readiness passed/i)).toBeInTheDocument();
+    expect(screen.getByText(/paper order intent audit log/i)).toBeInTheDocument();
+    expect(screen.getByText(/AAPL buy 10/i)).toBeInTheDocument();
+  });
+
   it('submits a pasted transcript to the backend', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
       if (url === '/api/transcripts' && init?.method === 'POST') {

@@ -172,6 +172,19 @@ const brokerCapabilities = {
   message: 'Current broker mode records audit-only paper order intents; no IBKR orders are submitted.',
 };
 
+const brokerOrderSubmissionCapability = {
+  provider: 'interactive_brokers',
+  current_execution_mode: 'audit_only',
+  order_intents_supported: true,
+  paper_broker_submission_implemented: false,
+  paper_broker_submission_enabled: false,
+  live_broker_submission_implemented: false,
+  live_broker_submission_enabled: false,
+  broker_order_operation_available: false,
+  message:
+    'IBKR paper order submission is not implemented or enabled; this app only records audit-only paper order intents.',
+};
+
 const brokerAccount = {
   provider: 'interactive_brokers',
   mode: 'paper',
@@ -500,6 +513,23 @@ describe('App', () => {
     expect(screen.getByText(/no IBKR orders are submitted/i)).toBeInTheDocument();
   });
 
+  it('renders explicit disabled IBKR paper order submission capability', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/order-submission-capability');
+    });
+    expect(await screen.findByText(/paper order submission implementation/i)).toBeInTheDocument();
+    expect(screen.getByText(/ibkr paper order submission not implemented/i)).toBeInTheDocument();
+    expect(screen.getByText(/ibkr paper order submission disabled/i)).toBeInTheDocument();
+    expect(screen.getByText(/ibkr live order submission disabled/i)).toBeInTheDocument();
+    expect(screen.getByText(/only records audit-only paper order intents/i)).toBeInTheDocument();
+  });
+
   it('renders the read-only IBKR account snapshot separately from order submission', async () => {
     const fetchMock = mockTradingApi();
 
@@ -531,7 +561,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/broker/connectivity-probe');
     });
-    expect(screen.getAllByText(/connectivity probe/i).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/connectivity probe/i)).length).toBeGreaterThan(0);
     expect(screen.getByText(/probe unavailable/i)).toBeInTheDocument();
     expect(screen.getByText(/no socket, account, or order operation was attempted/i)).toBeInTheDocument();
     expect(screen.getByText(/probe enabled: no/i)).toBeInTheDocument();
@@ -831,6 +861,13 @@ function mockTradingApi() {
 
     if (url === '/api/broker/capabilities') {
       return new Response(JSON.stringify(brokerCapabilities), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/broker/order-submission-capability') {
+      return new Response(JSON.stringify(brokerOrderSubmissionCapability), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });

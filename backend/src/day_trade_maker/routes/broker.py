@@ -10,6 +10,7 @@ from day_trade_maker.schemas import (
     BrokerAccountSnapshot,
     BrokerCapabilities,
     BrokerConnectivityProbe,
+    BrokerOrderSubmissionCapability,
     BrokerStatus,
     PaperOrderIntent,
     PaperOrderIntentCreate,
@@ -35,6 +36,19 @@ def get_broker_capabilities() -> BrokerCapabilities:
         message=(
             "Current broker mode records audit-only paper order intents; "
             "no IBKR orders are submitted."
+        )
+    )
+
+
+@router.get(
+    "/order-submission-capability",
+    response_model=BrokerOrderSubmissionCapability,
+)
+def get_broker_order_submission_capability() -> BrokerOrderSubmissionCapability:
+    return BrokerOrderSubmissionCapability(
+        message=(
+            "IBKR paper order submission is not implemented or enabled; "
+            "this app only records audit-only paper order intents."
         )
     )
 

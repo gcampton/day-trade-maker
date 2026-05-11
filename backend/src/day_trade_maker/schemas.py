@@ -212,6 +212,18 @@ class BrokerCapabilities(BaseModel):
     message: str
 
 
+class BrokerOrderSubmissionCapability(BaseModel):
+    provider: Literal["interactive_brokers"] = "interactive_brokers"
+    current_execution_mode: Literal["audit_only"] = "audit_only"
+    order_intents_supported: bool = True
+    paper_broker_submission_implemented: bool = False
+    paper_broker_submission_enabled: bool = False
+    live_broker_submission_implemented: bool = False
+    live_broker_submission_enabled: bool = False
+    broker_order_operation_available: bool = False
+    message: str
+
+
 class PaperOrderIntentCreate(BaseModel):
     strategy_id: int = Field(gt=0)
     risk_check_id: int = Field(gt=0)

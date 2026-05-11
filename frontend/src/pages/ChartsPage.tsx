@@ -7,6 +7,7 @@ import {
   getBrokerAccount,
   getBrokerCapabilities,
   getBrokerConnectivityProbe,
+  getBrokerOrderSubmissionCapability,
   getBrokerStatus,
   getMarketDataCandles,
   getPaperOrderIntents,
@@ -22,6 +23,7 @@ import {
   type BrokerAccountSnapshot,
   type BrokerCapabilities,
   type BrokerConnectivityProbe,
+  type BrokerOrderSubmissionCapability,
   type BrokerStatus,
   type MarketDataDatasetSummary,
   type PaperOrderIntent,
@@ -63,6 +65,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [riskCheck, setRiskCheck] = useState<RiskCheckRun | null>(null);
   const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | null>(null);
   const [brokerCapabilities, setBrokerCapabilities] = useState<BrokerCapabilities | null>(null);
+  const [brokerOrderSubmissionCapability, setBrokerOrderSubmissionCapability] =
+    useState<BrokerOrderSubmissionCapability | null>(null);
   const [brokerAccount, setBrokerAccount] = useState<BrokerAccountSnapshot | null>(null);
   const [brokerConnectivityProbe, setBrokerConnectivityProbe] = useState<BrokerConnectivityProbe | null>(null);
   const [orderIntent, setOrderIntent] = useState<PaperOrderIntent | null>(null);
@@ -240,16 +244,24 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     setIsLoadingBrokerStatus(true);
 
     try {
-      const [statusSnapshot, capabilitiesSnapshot, accountSnapshot, connectivityProbe] = await Promise.all([
+      const [
+        statusSnapshot,
+        capabilitiesSnapshot,
+        accountSnapshot,
+        connectivityProbe,
+        orderSubmissionCapability,
+      ] = await Promise.all([
         getBrokerStatus(),
         getBrokerCapabilities(),
         getBrokerAccount(),
         getBrokerConnectivityProbe(),
+        getBrokerOrderSubmissionCapability(),
       ]);
       setBrokerStatus(statusSnapshot);
       setBrokerCapabilities(capabilitiesSnapshot);
       setBrokerAccount(accountSnapshot);
       setBrokerConnectivityProbe(connectivityProbe);
+      setBrokerOrderSubmissionCapability(orderSubmissionCapability);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load IBKR broker status');
     } finally {
@@ -700,6 +712,47 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
               <div>
                 <dt>Capability note</dt>
                 <dd>{brokerCapabilities.message}</dd>
+              </div>
+            </dl>
+          ) : null}
+
+          {brokerOrderSubmissionCapability ? (
+            <dl className="backtest-summary" aria-label="Broker order submission capability">
+              <div>
+                <dt>Paper order submission implementation</dt>
+                <dd>
+                  {brokerOrderSubmissionCapability.paper_broker_submission_implemented
+                    ? 'IBKR paper order submission implemented'
+                    : 'IBKR paper order submission not implemented'}
+                </dd>
+              </div>
+              <div>
+                <dt>Paper order submission enabled</dt>
+                <dd>
+                  {brokerOrderSubmissionCapability.paper_broker_submission_enabled
+                    ? 'IBKR paper order submission enabled'
+                    : 'IBKR paper order submission disabled'}
+                </dd>
+              </div>
+              <div>
+                <dt>Live order submission enabled</dt>
+                <dd>
+                  {brokerOrderSubmissionCapability.live_broker_submission_enabled
+                    ? 'IBKR live order submission enabled'
+                    : 'IBKR live order submission disabled'}
+                </dd>
+              </div>
+              <div>
+                <dt>Broker order operations</dt>
+                <dd>
+                  {brokerOrderSubmissionCapability.broker_order_operation_available
+                    ? 'Broker order operation available'
+                    : 'Broker order operation unavailable'}
+                </dd>
+              </div>
+              <div>
+                <dt>Order submission note</dt>
+                <dd>{brokerOrderSubmissionCapability.message}</dd>
               </div>
             </dl>
           ) : null}

@@ -184,3 +184,24 @@ def test_get_broker_capabilities_separates_audit_intents_from_future_execution()
     assert body["message"] == (
         "Current broker mode records audit-only paper order intents; no IBKR orders are submitted."
     )
+
+
+def test_get_broker_order_submission_capability_is_explicitly_not_implemented_or_enabled() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/broker/order-submission-capability")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "interactive_brokers"
+    assert body["current_execution_mode"] == "audit_only"
+    assert body["order_intents_supported"] is True
+    assert body["paper_broker_submission_implemented"] is False
+    assert body["paper_broker_submission_enabled"] is False
+    assert body["live_broker_submission_implemented"] is False
+    assert body["live_broker_submission_enabled"] is False
+    assert body["broker_order_operation_available"] is False
+    assert body["message"] == (
+        "IBKR paper order submission is not implemented or enabled; "
+        "this app only records audit-only paper order intents."
+    )

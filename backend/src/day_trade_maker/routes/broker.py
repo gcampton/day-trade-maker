@@ -1,8 +1,10 @@
-import os
-import socket
-
 from fastapi import APIRouter, HTTPException, status
 
+from day_trade_maker.broker import (
+    EnvBrokerSettings,
+    SocketConnectivityProbe,
+    build_read_only_broker_status,
+)
 from day_trade_maker.schemas import (
     BrokerAccountSnapshot,
     BrokerCapabilities,
@@ -18,80 +20,7 @@ from day_trade_maker.stores import (
 )
 
 router = APIRouter(prefix="/api/broker", tags=["broker"])
-
-
-def ibkr_host() -> str:
-    return os.environ.get("DAY_TRADE_MAKER_IBKR_HOST", "127.0.0.1")
-
-
-def ibkr_port() -> int:
-    return int(os.environ.get("DAY_TRADE_MAKER_IBKR_PORT", "4002"))
-
-
-def ibkr_connectivity_probe_enabled() -> bool:
-    return os.environ.get("DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_ENABLED", "").lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-
-
-def ibkr_connectivity_probe_timeout_seconds() -> float:
-    return float(os.environ.get("DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_TIMEOUT_SECONDS", "1.0"))
-
-
-def build_read_only_connectivity_probe() -> BrokerConnectivityProbe:
-    host = ibkr_host()
-    port = ibkr_port()
-    timeout_seconds = ibkr_connectivity_probe_timeout_seconds()
-    probe_enabled = ibkr_connectivity_probe_enabled()
-
-    if not probe_enabled:
-        return BrokerConnectivityProbe(
-            host=host,
-            port=port,
-            timeout_seconds=timeout_seconds,
-            message=(
-                "Read-only IBKR connectivity probe is not enabled; no socket, account, "
-                "or order operation was attempted."
-            ),
-        )
-
-    probe_socket = None
-    try:
-        probe_socket = socket.create_connection((host, port), timeout=timeout_seconds)
-    except OSError:
-        return BrokerConnectivityProbe(
-            probe_status="not_connected",
-            connection_status="not_connected",
-            probe_enabled=True,
-            probe_attempted=True,
-            host=host,
-            port=port,
-            timeout_seconds=timeout_seconds,
-            message=(
-                f"Read-only IBKR socket reachability probe could not reach {host}:{port}; "
-                "no account or order operation was attempted."
-            ),
-        )
-    finally:
-        if probe_socket is not None:
-            probe_socket.close()
-
-    return BrokerConnectivityProbe(
-        probe_status="connected",
-        connection_status="connected",
-        probe_enabled=True,
-        probe_attempted=True,
-        host=host,
-        port=port,
-        timeout_seconds=timeout_seconds,
-        message=(
-            f"Read-only IBKR socket reachability probe reached {host}:{port}; "
-            "no account or order operation was attempted."
-        ),
-    )
+connectivity_probe = SocketConnectivityProbe()
 
 
 @router.get("/order-intents", response_model=list[PaperOrderIntent])
@@ -111,25 +40,12 @@ def get_broker_capabilities() -> BrokerCapabilities:
 
 @router.get("/status", response_model=BrokerStatus)
 def get_broker_status() -> BrokerStatus:
-    host = ibkr_host()
-    port = ibkr_port()
-    client_id = int(os.environ.get("DAY_TRADE_MAKER_IBKR_CLIENT_ID", "1"))
-
-    return BrokerStatus(
-        configured_host=host,
-        configured_port=port,
-        configured_client_id=client_id,
-        connection_diagnostic=(
-            f"Configured for IBKR paper gateway at {host}:{port} with client id {client_id}; "
-            "connection probing is read-only and not yet active."
-        ),
-        message="IBKR read-only scaffold is configured; no broker session is connected.",
-    )
+    return build_read_only_broker_status(EnvBrokerSettings.from_environment())
 
 
 @router.get("/connectivity-probe", response_model=BrokerConnectivityProbe)
 def get_broker_connectivity_probe() -> BrokerConnectivityProbe:
-    return build_read_only_connectivity_probe()
+    return connectivity_probe.check(EnvBrokerSettings.from_environment())
 
 
 @router.get("/account", response_model=BrokerAccountSnapshot)

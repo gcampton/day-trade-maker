@@ -181,6 +181,7 @@ const brokerOrderSubmissionCapability = {
   live_broker_submission_implemented: false,
   live_broker_submission_enabled: false,
   broker_order_operation_available: false,
+  paper_order_submission_confirmation_phrase: 'SUBMIT IBKR PAPER ORDER',
   message:
     'IBKR paper order submission is not implemented or enabled; this app only records audit-only paper order intents.',
 };
@@ -232,6 +233,7 @@ const brokerSafetySummary = {
   live_broker_submission_implemented: false,
   live_broker_submission_enabled: false,
   broker_order_operation_available: false,
+  paper_order_submission_confirmation_phrase: 'SUBMIT IBKR PAPER ORDER',
   account_snapshot_enabled: false,
   account_data_loaded: false,
   account_reader: 'static',
@@ -852,9 +854,18 @@ describe('App', () => {
   });
 
   it('requires the exact phrase before submitting an order intent to the IBKR paper account', async () => {
+    const customConfirmationPhrase = 'TYPE PAPER SUBMIT';
+    const customBrokerSafetySummary = {
+      ...enabledBrokerSafetySummary,
+      paper_order_submission_confirmation_phrase: customConfirmationPhrase,
+      order_submission_capability: {
+        ...enabledBrokerOrderSubmissionCapability,
+        paper_order_submission_confirmation_phrase: customConfirmationPhrase,
+      },
+    };
     const fetchMock = mockTradingApi({
       auditSnapshot: auditSnapshotWithoutPaperBrokerSubmissions,
-      brokerSafetySummary: enabledBrokerSafetySummary,
+      brokerSafetySummary: customBrokerSafetySummary,
       paperBrokerOrderSubmissions: [createdPaperBrokerOrderSubmission],
     });
 
@@ -875,12 +886,12 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText(/broker side-effect csrf token/i), {
       target: { value: 'csrf-secret' },
     });
-    fireEvent.change(screen.getByLabelText(/type submit ibkr paper order to confirm/i), {
-      target: { value: ' SUBMIT IBKR PAPER ORDER ' },
+    fireEvent.change(screen.getByLabelText(/type type paper submit to confirm/i), {
+      target: { value: 'SUBMIT IBKR PAPER ORDER' },
     });
     expect(submitButton).toBeDisabled();
-    fireEvent.change(screen.getByLabelText(/type submit ibkr paper order to confirm/i), {
-      target: { value: 'SUBMIT IBKR PAPER ORDER' },
+    fireEvent.change(screen.getByLabelText(/type type paper submit to confirm/i), {
+      target: { value: customConfirmationPhrase },
     });
     expect(submitButton).toBeEnabled();
     fireEvent.click(submitButton);
@@ -899,8 +910,8 @@ describe('App', () => {
     expect(JSON.parse(request.body as string)).toEqual({
       order_intent_id: 1,
       user_confirmed: true,
-      confirmation_phrase: 'SUBMIT IBKR PAPER ORDER',
-      safety_summary_checked_at: enabledBrokerSafetySummary.checked_at,
+      confirmation_phrase: customConfirmationPhrase,
+      safety_summary_checked_at: customBrokerSafetySummary.checked_at,
     });
     expect(await screen.findByText(/broker order id: 12345/i)).toBeInTheDocument();
     expect(screen.getByText(/status: submitted_to_paper_broker/i)).toBeInTheDocument();

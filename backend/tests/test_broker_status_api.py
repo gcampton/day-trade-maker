@@ -203,6 +203,7 @@ def test_get_broker_order_submission_capability_is_explicitly_not_implemented_or
     assert body["live_broker_submission_implemented"] is False
     assert body["live_broker_submission_enabled"] is False
     assert body["broker_order_operation_available"] is False
+    assert body["paper_order_submission_confirmation_phrase"] == "SUBMIT IBKR PAPER ORDER"
     assert body["message"] == (
         "IBKR paper order submission is not implemented or enabled; "
         "this app only records audit-only paper order intents."
@@ -227,6 +228,7 @@ def test_get_broker_safety_summary_aggregates_read_only_broker_boundaries(monkey
     assert body["mode"] == "paper"
     assert body["checked_at"] is not None
     assert body["max_age_seconds"] == 60.0
+    assert body["paper_order_submission_confirmation_phrase"] == "SUBMIT IBKR PAPER ORDER"
     assert body["current_execution_mode"] == "audit_only"
     assert body["connection_status"] == "not_connected"
     assert body["read_only"] is True
@@ -249,6 +251,10 @@ def test_get_broker_safety_summary_aggregates_read_only_broker_boundaries(monkey
     assert body["connectivity_probe"]["order_submission_enabled"] is False
     assert body["capabilities"]["supports_order_intents"] is True
     assert body["order_submission_capability"]["broker_order_operation_available"] is False
+    assert (
+        body["order_submission_capability"]["paper_order_submission_confirmation_phrase"]
+        == "SUBMIT IBKR PAPER ORDER"
+    )
     assert body["message"] == (
         "Broker safety summary is read-only and audit-only; no IBKR account, connectivity, "
         "or order-submission state permits broker orders."
@@ -272,6 +278,7 @@ def test_get_broker_safety_summary_message_reflects_enabled_paper_submission(mon
 
     monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_PAPER_ORDER_SUBMISSION_ENABLED", "true")
     monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_PAPER_ACCOUNT_ID", "DU1234567")
+    monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_PAPER_ORDER_CONFIRMATION_PHRASE", "TYPE PAPER SUBMIT")
     monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_PAPER_ORDER_MAX_SAFETY_SUMMARY_AGE_SECONDS", "45")
     monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_ENABLED", "true")
     monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_READER", "ib_async")
@@ -288,6 +295,7 @@ def test_get_broker_safety_summary_message_reflects_enabled_paper_submission(mon
     body = response.json()
     assert body["current_execution_mode"] == "paper_broker"
     assert body["max_age_seconds"] == 45.0
+    assert body["paper_order_submission_confirmation_phrase"] == "TYPE PAPER SUBMIT"
     assert body["order_submission_enabled"] is True
     assert body["paper_broker_submission_enabled"] is True
     assert body["broker_order_operation_available"] is True
@@ -295,6 +303,10 @@ def test_get_broker_safety_summary_message_reflects_enabled_paper_submission(mon
     assert body["read_only"] is False
     assert body["capabilities"]["supports_paper_broker_submission"] is True
     assert body["capabilities"]["order_submission_enabled"] is True
+    assert (
+        body["order_submission_capability"]["paper_order_submission_confirmation_phrase"]
+        == "TYPE PAPER SUBMIT"
+    )
     assert body["message"] == (
         "Broker safety summary permits IBKR paper-account order submission only; "
         "live trading remains disabled."

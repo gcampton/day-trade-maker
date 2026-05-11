@@ -120,6 +120,9 @@ def build_order_submission_capability(
 ) -> BrokerOrderSubmissionCapability:
     if not settings.paper_order_submission_enabled:
         return BrokerOrderSubmissionCapability(
+            paper_order_submission_confirmation_phrase=(
+                settings.paper_order_submission_confirmation_phrase
+            ),
             message=(
                 "IBKR paper order submission is not implemented or enabled; "
                 "this app only records audit-only paper order intents."
@@ -136,6 +139,9 @@ def build_order_submission_capability(
     ):
         return BrokerOrderSubmissionCapability(
             paper_broker_submission_implemented=True,
+            paper_order_submission_confirmation_phrase=(
+                settings.paper_order_submission_confirmation_phrase
+            ),
             message=(
                 "IBKR paper order submission is configured but unavailable because a loaded "
                 "ib_async account snapshot is required; no broker order operation is available."
@@ -145,6 +151,9 @@ def build_order_submission_capability(
     if not _is_verified_ibkr_paper_account(settings, account_snapshot):
         return BrokerOrderSubmissionCapability(
             paper_broker_submission_implemented=True,
+            paper_order_submission_confirmation_phrase=(
+                settings.paper_order_submission_confirmation_phrase
+            ),
             message=(
                 "IBKR paper order submission is configured but unavailable because the "
                 "loaded account is not the configured IBKR paper account; no broker order "
@@ -157,6 +166,9 @@ def build_order_submission_capability(
         paper_broker_submission_implemented=True,
         paper_broker_submission_enabled=True,
         broker_order_operation_available=True,
+        paper_order_submission_confirmation_phrase=(
+            settings.paper_order_submission_confirmation_phrase
+        ),
         message=(
             "IBKR paper order submission is enabled for the configured paper account; "
             "live trading remains disabled."

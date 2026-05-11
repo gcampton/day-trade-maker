@@ -185,6 +185,7 @@ export type BrokerOrderSubmissionCapability = {
   live_broker_submission_implemented: boolean;
   live_broker_submission_enabled: boolean;
   broker_order_operation_available: boolean;
+  paper_order_submission_confirmation_phrase: string;
   message: string;
 };
 
@@ -193,6 +194,7 @@ export type BrokerSafetySummary = {
   mode: 'paper';
   checked_at: string;
   max_age_seconds: number;
+  paper_order_submission_confirmation_phrase: string;
   current_execution_mode: 'audit_only' | 'paper_broker';
   connection_status: 'not_connected' | 'connected';
   read_only: boolean;

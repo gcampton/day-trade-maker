@@ -42,7 +42,7 @@ Notes:
 - Missing account IDs, live-looking `U...` IDs, and mismatched IDs keep broker order operations unavailable.
 - The backend sets the verified paper account id on the IBKR order before `placeOrder`.
 - If `DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED=true`, the submission and status-refresh endpoints fail closed unless both server-side tokens are configured and the request includes matching `Authorization: Bearer ...` and `X-CSRF-Token` headers.
-- `GET /api/broker/safety-summary` returns `checked_at` and `max_age_seconds`; paper submission must include that recent `checked_at` value and refreshes are required before `DAY_TRADE_MAKER_IBKR_PAPER_ORDER_MAX_SAFETY_SUMMARY_AGE_SECONDS` elapses.
+- `GET /api/broker/safety-summary` returns `checked_at`, `max_age_seconds`, and the currently required confirmation phrase; paper submission must include that recent `checked_at` value and refreshes are required before `DAY_TRADE_MAKER_IBKR_PAPER_ORDER_MAX_SAFETY_SUMMARY_AGE_SECONDS` elapses.
 - The frontend exposes in-memory token fields in the IBKR paper submission panel. Leave them blank only for trusted local development where the backend auth gate remains disabled.
 
 ## Manual smoke flow
@@ -65,7 +65,7 @@ Notes:
    - passed risk check
    - audit-only paper order intent
 6. Enter the broker side-effect admin token and CSRF token in the UI if `DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED=true`.
-7. Type the exact phrase: `SUBMIT IBKR PAPER ORDER`.
+7. Type the exact phrase shown by the UI / `paper_order_submission_confirmation_phrase` (default: `SUBMIT IBKR PAPER ORDER`).
 8. Click `Submit to IBKR paper account`.
 9. Verify the returned broker order id/status in the UI and in the exported audit snapshot.
 10. To refresh status later, click `Refresh IBKR paper order status`; this uses the same paper-account safety gates and persists `latest_broker_order_status`, `broker_status_checked_at`, and the raw status response on the existing submission artifact.

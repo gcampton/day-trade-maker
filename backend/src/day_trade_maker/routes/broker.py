@@ -452,6 +452,9 @@ def get_broker_safety_summary() -> BrokerSafetySummary:
     return BrokerSafetySummary(
         checked_at=datetime.now(UTC),
         max_age_seconds=settings.paper_order_submission_max_safety_summary_age_seconds,
+        paper_order_submission_confirmation_phrase=(
+            settings.paper_order_submission_confirmation_phrase
+        ),
         current_execution_mode=order_submission_capability.current_execution_mode,
         connection_status=status_snapshot.connection_status,
         read_only=read_only,

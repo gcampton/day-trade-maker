@@ -52,7 +52,7 @@ const exampleCsv = `timestamp,open,high,low,close,volume
 2026-05-10T14:35:00Z,101,103,100.5,102,200000
 `;
 
-const paperBrokerSubmissionConfirmationPhrase = 'SUBMIT IBKR PAPER ORDER';
+const defaultPaperBrokerSubmissionConfirmationPhrase = 'SUBMIT IBKR PAPER ORDER';
 
 type ChartsPageProps = {
   selectedStrategy: StrategyCandidate | null;
@@ -98,6 +98,11 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [isExportingAudit, setIsExportingAudit] = useState(false);
   const [isImportingAudit, setIsImportingAudit] = useState(false);
   const [isResettingAudit, setIsResettingAudit] = useState(false);
+
+  const paperBrokerSubmissionConfirmationPhrase =
+    brokerSafetySummary?.paper_order_submission_confirmation_phrase ??
+    brokerOrderSubmissionCapability?.paper_order_submission_confirmation_phrase ??
+    defaultPaperBrokerSubmissionConfirmationPhrase;
 
   useEffect(() => {
     let isMounted = true;
@@ -1053,7 +1058,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                     This submits to the configured IBKR paper account only. Live trading is not supported.
                   </p>
                   <label>
-                    Type SUBMIT IBKR PAPER ORDER to confirm
+                    Type {paperBrokerSubmissionConfirmationPhrase} to confirm
                     <input
                       value={paperSubmissionConfirmationPhrase}
                       onChange={(event) => setPaperSubmissionConfirmationPhrase(event.target.value)}

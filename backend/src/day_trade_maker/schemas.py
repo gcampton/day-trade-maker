@@ -221,6 +221,7 @@ class BrokerOrderSubmissionCapability(BaseModel):
     live_broker_submission_implemented: bool = False
     live_broker_submission_enabled: bool = False
     broker_order_operation_available: bool = False
+    paper_order_submission_confirmation_phrase: str = "SUBMIT IBKR PAPER ORDER"
     message: str
 
 
@@ -229,6 +230,7 @@ class BrokerSafetySummary(BaseModel):
     mode: Literal["paper"] = "paper"
     checked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     max_age_seconds: float = 60.0
+    paper_order_submission_confirmation_phrase: str = "SUBMIT IBKR PAPER ORDER"
     current_execution_mode: Literal["audit_only", "paper_broker"] = "audit_only"
     connection_status: Literal["not_connected", "connected"] = "not_connected"
     read_only: bool = True

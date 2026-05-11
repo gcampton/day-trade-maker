@@ -153,10 +153,12 @@ export type BrokerConnectivityProbe = {
   connection_status: 'not_connected' | 'connected';
   read_only: boolean;
   order_submission_enabled: boolean;
+  probe_enabled: boolean;
   probe_attempted: boolean;
   account_data_loaded: boolean;
   host: string;
   port: number;
+  timeout_seconds: number;
   message: string;
 };
 

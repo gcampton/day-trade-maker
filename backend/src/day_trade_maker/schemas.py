@@ -189,10 +189,12 @@ class BrokerConnectivityProbe(BaseModel):
     connection_status: Literal["not_connected", "connected"] = "not_connected"
     read_only: bool = True
     order_submission_enabled: bool = False
+    probe_enabled: bool = False
     probe_attempted: bool = False
     account_data_loaded: bool = False
     host: str
     port: int
+    timeout_seconds: float = 1.0
     message: str
 
 

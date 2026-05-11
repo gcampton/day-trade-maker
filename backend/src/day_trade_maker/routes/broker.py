@@ -1,4 +1,5 @@
 import os
+import socket
 
 from fastapi import APIRouter, HTTPException, status
 
@@ -27,13 +28,68 @@ def ibkr_port() -> int:
     return int(os.environ.get("DAY_TRADE_MAKER_IBKR_PORT", "4002"))
 
 
+def ibkr_connectivity_probe_enabled() -> bool:
+    return os.environ.get("DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_ENABLED", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def ibkr_connectivity_probe_timeout_seconds() -> float:
+    return float(os.environ.get("DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_TIMEOUT_SECONDS", "1.0"))
+
+
 def build_read_only_connectivity_probe() -> BrokerConnectivityProbe:
+    host = ibkr_host()
+    port = ibkr_port()
+    timeout_seconds = ibkr_connectivity_probe_timeout_seconds()
+    probe_enabled = ibkr_connectivity_probe_enabled()
+
+    if not probe_enabled:
+        return BrokerConnectivityProbe(
+            host=host,
+            port=port,
+            timeout_seconds=timeout_seconds,
+            message=(
+                "Read-only IBKR connectivity probe is not enabled; no socket, account, "
+                "or order operation was attempted."
+            ),
+        )
+
+    probe_socket = None
+    try:
+        probe_socket = socket.create_connection((host, port), timeout=timeout_seconds)
+    except OSError:
+        return BrokerConnectivityProbe(
+            probe_status="not_connected",
+            connection_status="not_connected",
+            probe_enabled=True,
+            probe_attempted=True,
+            host=host,
+            port=port,
+            timeout_seconds=timeout_seconds,
+            message=(
+                f"Read-only IBKR socket reachability probe could not reach {host}:{port}; "
+                "no account or order operation was attempted."
+            ),
+        )
+    finally:
+        if probe_socket is not None:
+            probe_socket.close()
+
     return BrokerConnectivityProbe(
-        host=ibkr_host(),
-        port=ibkr_port(),
+        probe_status="connected",
+        connection_status="connected",
+        probe_enabled=True,
+        probe_attempted=True,
+        host=host,
+        port=port,
+        timeout_seconds=timeout_seconds,
         message=(
-            "Read-only IBKR connectivity probe is not enabled; no socket, account, "
-            "or order operation was attempted."
+            f"Read-only IBKR socket reachability probe reached {host}:{port}; "
+            "no account or order operation was attempted."
         ),
     )
 

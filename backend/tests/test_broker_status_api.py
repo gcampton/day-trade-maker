@@ -1,3 +1,5 @@
+import socket
+
 from fastapi.testclient import TestClient
 
 from day_trade_maker.api import app
@@ -62,7 +64,12 @@ def test_get_broker_account_returns_read_only_empty_account_snapshot() -> None:
     assert body["order_submission_enabled"] is False
 
 
-def test_get_broker_connectivity_probe_is_read_only_and_disabled_by_default() -> None:
+def test_get_broker_connectivity_probe_is_read_only_and_disabled_by_default(monkeypatch) -> None:
+    def fail_if_socket_attempted(*_args, **_kwargs):
+        raise AssertionError("socket probe must stay disabled unless explicitly enabled")
+
+    monkeypatch.delenv("DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_ENABLED", raising=False)
+    monkeypatch.setattr(socket, "create_connection", fail_if_socket_attempted)
     client = TestClient(app)
 
     response = client.get("/api/broker/connectivity-probe")
@@ -74,13 +81,81 @@ def test_get_broker_connectivity_probe_is_read_only_and_disabled_by_default() ->
     assert body["connection_status"] == "not_connected"
     assert body["read_only"] is True
     assert body["order_submission_enabled"] is False
+    assert body["probe_enabled"] is False
     assert body["probe_attempted"] is False
     assert body["account_data_loaded"] is False
     assert body["host"] == "127.0.0.1"
     assert body["port"] == 4002
+    assert body["timeout_seconds"] == 1.0
     assert body["message"] == (
         "Read-only IBKR connectivity probe is not enabled; no socket, account, "
         "or order operation was attempted."
+    )
+
+
+def test_get_broker_connectivity_probe_attempts_opt_in_read_only_socket_check(
+    monkeypatch,
+) -> None:
+    socket_calls = []
+
+    class FakeSocket:
+        def close(self) -> None:
+            socket_calls.append("closed")
+
+    def fake_create_connection(address, timeout):
+        socket_calls.append((address, timeout))
+        return FakeSocket()
+
+    monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_ENABLED", "true")
+    monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_HOST", "192.0.2.10")
+    monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_PORT", "7497")
+    monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_TIMEOUT_SECONDS", "0.25")
+    monkeypatch.setattr(socket, "create_connection", fake_create_connection)
+    client = TestClient(app)
+
+    response = client.get("/api/broker/connectivity-probe")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["probe_enabled"] is True
+    assert body["probe_attempted"] is True
+    assert body["probe_status"] == "connected"
+    assert body["connection_status"] == "connected"
+    assert body["read_only"] is True
+    assert body["order_submission_enabled"] is False
+    assert body["account_data_loaded"] is False
+    assert body["host"] == "192.0.2.10"
+    assert body["port"] == 7497
+    assert body["timeout_seconds"] == 0.25
+    assert body["message"] == (
+        "Read-only IBKR socket reachability probe reached 192.0.2.10:7497; "
+        "no account or order operation was attempted."
+    )
+    assert socket_calls == [(('192.0.2.10', 7497), 0.25), "closed"]
+
+
+def test_get_broker_connectivity_probe_reports_opt_in_socket_failure(monkeypatch) -> None:
+    def fake_create_connection(_address, timeout):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_ENABLED", "1")
+    monkeypatch.setattr(socket, "create_connection", fake_create_connection)
+    client = TestClient(app)
+
+    response = client.get("/api/broker/connectivity-probe")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["probe_enabled"] is True
+    assert body["probe_attempted"] is True
+    assert body["probe_status"] == "not_connected"
+    assert body["connection_status"] == "not_connected"
+    assert body["read_only"] is True
+    assert body["order_submission_enabled"] is False
+    assert body["account_data_loaded"] is False
+    assert body["message"] == (
+        "Read-only IBKR socket reachability probe could not reach 127.0.0.1:4002; "
+        "no account or order operation was attempted."
     )
 
 

@@ -189,10 +189,12 @@ const brokerConnectivityProbe = {
   connection_status: 'not_connected',
   read_only: true,
   order_submission_enabled: false,
+  probe_enabled: false,
   probe_attempted: false,
   account_data_loaded: false,
   host: '127.0.0.1',
   port: 4002,
+  timeout_seconds: 1.0,
   message:
     'Read-only IBKR connectivity probe is not enabled; no socket, account, or order operation was attempted.',
 };
@@ -523,7 +525,9 @@ describe('App', () => {
     expect(screen.getAllByText(/connectivity probe/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/probe unavailable/i)).toBeInTheDocument();
     expect(screen.getByText(/no socket, account, or order operation was attempted/i)).toBeInTheDocument();
+    expect(screen.getByText(/probe enabled: no/i)).toBeInTheDocument();
     expect(screen.getByText(/probe attempted: no/i)).toBeInTheDocument();
+    expect(screen.getByText(/probe timeout: 1s/i)).toBeInTheDocument();
     expect(screen.getByText(/account data loaded: no/i)).toBeInTheDocument();
     expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);
   });

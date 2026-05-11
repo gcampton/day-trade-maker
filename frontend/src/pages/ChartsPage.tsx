@@ -623,8 +623,16 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                 </dd>
               </div>
               <div>
+                <dt>Probe enabled</dt>
+                <dd>Probe enabled: {brokerConnectivityProbe.probe_enabled ? 'yes' : 'no'}</dd>
+              </div>
+              <div>
                 <dt>Probe attempted</dt>
                 <dd>Probe attempted: {brokerConnectivityProbe.probe_attempted ? 'yes' : 'no'}</dd>
+              </div>
+              <div>
+                <dt>Probe timeout</dt>
+                <dd>Probe timeout: {brokerConnectivityProbe.timeout_seconds}s</dd>
               </div>
               <div>
                 <dt>Account data</dt>

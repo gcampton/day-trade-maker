@@ -88,6 +88,8 @@ class StaticAccountSnapshotReader:
         return BrokerAccountSnapshot(
             account_snapshot_enabled=True,
             account_data_loaded=True,
+            account_reader="static",
+            ibkr_client_dependency_available=False,
             account_id=self.account_id,
             balances=self.balances,
             positions=self.positions,
@@ -105,6 +107,8 @@ class IbkrReadOnlyAccountSnapshotReader:
     def read(self, settings: EnvBrokerSettings) -> BrokerAccountSnapshot:
         if not settings.account_snapshot_enabled:
             return BrokerAccountSnapshot(
+                account_reader="ib_async",
+                ibkr_client_dependency_available=False,
                 message=(
                     "IBKR account snapshot is read-only and disabled; no account or "
                     "order operation was attempted."
@@ -116,6 +120,8 @@ class IbkrReadOnlyAccountSnapshotReader:
         except ImportError:
             return BrokerAccountSnapshot(
                 account_snapshot_enabled=True,
+                account_reader="ib_async",
+                ibkr_client_dependency_available=False,
                 message=(
                     "Read-only IBKR account snapshot reader requires optional ib_async; "
                     "no account or order operation was attempted."
@@ -138,6 +144,8 @@ class IbkrReadOnlyAccountSnapshotReader:
             return BrokerAccountSnapshot(
                 account_snapshot_enabled=True,
                 account_data_loaded=True,
+                account_reader="ib_async",
+                ibkr_client_dependency_available=True,
                 account_id=accounts[0] if accounts else None,
                 balances=balances,
                 positions=positions,
@@ -149,6 +157,8 @@ class IbkrReadOnlyAccountSnapshotReader:
         except Exception:
             return BrokerAccountSnapshot(
                 account_snapshot_enabled=True,
+                account_reader="ib_async",
+                ibkr_client_dependency_available=True,
                 message=(
                     "Read-only IBKR account snapshot could not load account data; "
                     "no order operation was attempted."

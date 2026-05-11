@@ -135,6 +135,8 @@ def test_static_account_snapshot_reader_disabled_returns_empty_read_only_snapsho
 
     assert snapshot.account_snapshot_enabled is False
     assert snapshot.account_data_loaded is False
+    assert snapshot.account_reader == "static"
+    assert snapshot.ibkr_client_dependency_available is False
     assert snapshot.read_only is True
     assert snapshot.order_submission_enabled is False
     assert snapshot.account_id is None
@@ -158,6 +160,8 @@ def test_static_account_snapshot_reader_enabled_returns_read_only_fixture_snapsh
 
     assert snapshot.account_snapshot_enabled is True
     assert snapshot.account_data_loaded is True
+    assert snapshot.account_reader == "static"
+    assert snapshot.ibkr_client_dependency_available is False
     assert snapshot.read_only is True
     assert snapshot.order_submission_enabled is False
     assert snapshot.account_id == "DU1234567"
@@ -182,6 +186,8 @@ def test_ibkr_read_only_account_reader_disabled_does_not_create_client() -> None
 
     assert snapshot.account_snapshot_enabled is False
     assert snapshot.account_data_loaded is False
+    assert snapshot.account_reader == "ib_async"
+    assert snapshot.ibkr_client_dependency_available is False
     assert snapshot.read_only is True
     assert snapshot.order_submission_enabled is False
     assert snapshot.balances == []
@@ -241,6 +247,8 @@ def test_ibkr_read_only_account_reader_connects_reads_and_disconnects_without_or
 
     assert snapshot.account_snapshot_enabled is True
     assert snapshot.account_data_loaded is True
+    assert snapshot.account_reader == "ib_async"
+    assert snapshot.ibkr_client_dependency_available is True
     assert snapshot.read_only is True
     assert snapshot.order_submission_enabled is False
     assert snapshot.account_id == "DU1234567"
@@ -291,12 +299,33 @@ def test_ibkr_read_only_account_reader_disconnects_after_read_error() -> None:
 
     assert snapshot.account_snapshot_enabled is True
     assert snapshot.account_data_loaded is False
+    assert snapshot.account_reader == "ib_async"
+    assert snapshot.ibkr_client_dependency_available is True
     assert snapshot.read_only is True
     assert snapshot.order_submission_enabled is False
     assert snapshot.balances == []
     assert snapshot.positions == []
     assert "could not load" in snapshot.message
     assert calls == [("connect", True), ("managedAccounts",), ("disconnect",)]
+
+
+def test_ibkr_read_only_account_reader_reports_missing_optional_dependency() -> None:
+    class MissingDependencyReader(IbkrReadOnlyAccountSnapshotReader):
+        def _build_client(self):
+            raise ImportError("ib_async missing")
+
+    settings = EnvBrokerSettings(account_snapshot_enabled=True)
+    reader = MissingDependencyReader()
+
+    snapshot = reader.read(settings)
+
+    assert snapshot.account_snapshot_enabled is True
+    assert snapshot.account_data_loaded is False
+    assert snapshot.account_reader == "ib_async"
+    assert snapshot.ibkr_client_dependency_available is False
+    assert snapshot.read_only is True
+    assert snapshot.order_submission_enabled is False
+    assert "requires optional ib_async" in snapshot.message
 
 
 def test_build_account_snapshot_reader_selects_optional_ibkr_reader() -> None:

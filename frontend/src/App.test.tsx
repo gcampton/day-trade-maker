@@ -179,6 +179,8 @@ const brokerAccount = {
   order_submission_enabled: false,
   account_snapshot_enabled: false,
   account_data_loaded: false,
+  account_reader: 'static',
+  ibkr_client_dependency_available: false,
   account_id: null,
   balances: [],
   positions: [],
@@ -512,6 +514,8 @@ describe('App', () => {
     expect(screen.getByText(/no account or order operation was attempted/i)).toBeInTheDocument();
     expect(screen.getByText(/account snapshot enabled: no/i)).toBeInTheDocument();
     expect(screen.getAllByText(/account data loaded: no/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/account reader: static/i)).toBeInTheDocument();
+    expect(screen.getByText(/ibkr dependency available: no/i)).toBeInTheDocument();
     expect(screen.getByText(/0 balances/i)).toBeInTheDocument();
     expect(screen.getByText(/0 positions/i)).toBeInTheDocument();
     expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);

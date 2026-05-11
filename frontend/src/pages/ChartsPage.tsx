@@ -600,6 +600,16 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                 <dd>Account data loaded: {brokerAccount.account_data_loaded ? 'yes' : 'no'}</dd>
               </div>
               <div>
+                <dt>Account reader</dt>
+                <dd>Account reader: {brokerAccount.account_reader}</dd>
+              </div>
+              <div>
+                <dt>IBKR dependency</dt>
+                <dd>
+                  IBKR dependency available: {brokerAccount.ibkr_client_dependency_available ? 'yes' : 'no'}
+                </dd>
+              </div>
+              <div>
                 <dt>Balances</dt>
                 <dd>{brokerAccount.balances.length} balances</dd>
               </div>

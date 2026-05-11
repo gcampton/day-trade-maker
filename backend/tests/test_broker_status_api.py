@@ -62,6 +62,8 @@ def test_get_broker_account_returns_read_only_empty_account_snapshot(monkeypatch
     assert body["read_only"] is True
     assert body["account_snapshot_enabled"] is False
     assert body["account_data_loaded"] is False
+    assert body["account_reader"] == "static"
+    assert body["ibkr_client_dependency_available"] is False
     assert body["positions"] == []
     assert body["balances"] == []
     assert body["order_submission_enabled"] is False

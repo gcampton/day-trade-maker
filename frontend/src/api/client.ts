@@ -143,6 +143,8 @@ export type BrokerAccountSnapshot = {
   order_submission_enabled: boolean;
   account_snapshot_enabled: boolean;
   account_data_loaded: boolean;
+  account_reader: 'static' | 'ib_async';
+  ibkr_client_dependency_available: boolean;
   account_id: string | null;
   balances: Array<Record<string, string | number>>;
   positions: Array<Record<string, string | number>>;

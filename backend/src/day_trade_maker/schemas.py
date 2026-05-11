@@ -179,6 +179,8 @@ class BrokerAccountSnapshot(BaseModel):
     order_submission_enabled: bool = False
     account_snapshot_enabled: bool = False
     account_data_loaded: bool = False
+    account_reader: Literal["static", "ib_async"] = "static"
+    ibkr_client_dependency_available: bool = False
     account_id: str | None = None
     balances: list[dict[str, str | float]] = Field(default_factory=list)
     positions: list[dict[str, str | float]] = Field(default_factory=list)

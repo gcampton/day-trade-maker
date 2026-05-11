@@ -520,7 +520,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/broker/capabilities');
     });
-    expect(await screen.findByText(/execution mode/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/execution mode/i)).length).toBeGreaterThan(0);
     expect(screen.getByText(/audit-only order intents/i)).toBeInTheDocument();
     expect(screen.getByText(/paper broker submission disabled/i)).toBeInTheDocument();
     expect(screen.getByText(/live broker submission disabled/i)).toBeInTheDocument();
@@ -541,7 +541,7 @@ describe('App', () => {
     expect(screen.getByText(/ibkr paper order submission not implemented/i)).toBeInTheDocument();
     expect(screen.getByText(/ibkr paper order submission disabled/i)).toBeInTheDocument();
     expect(screen.getByText(/ibkr live order submission disabled/i)).toBeInTheDocument();
-    expect(screen.getByText(/only records audit-only paper order intents/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/only records audit-only paper order intents/i).length).toBeGreaterThan(0);
   });
 
   it('renders the read-only IBKR account snapshot separately from order submission', async () => {
@@ -642,6 +642,11 @@ describe('App', () => {
     expect(await screen.findByText(/paper order intent recorded/i)).toBeInTheDocument();
     expect(screen.getAllByText(/no ibkr order was submitted/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/created_not_submitted/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/order intent execution mode/i)).toBeInTheDocument();
+    expect(screen.getByText(/audit-only at recording/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/ibkr paper submission disabled at recording/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/broker order operation unavailable at recording/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/only records audit-only paper order intents/i).length).toBeGreaterThan(0);
     expect(fetchMock).toHaveBeenCalledWith('/api/broker/order-intents');
     expect(screen.getByText(/paper order intent audit log/i)).toBeInTheDocument();
     expect(screen.getByText(/AAPL buy 10/i)).toBeInTheDocument();

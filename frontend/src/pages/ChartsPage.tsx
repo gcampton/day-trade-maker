@@ -842,6 +842,30 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                   <dt>Broker submission</dt>
                   <dd>{orderIntent.submitted_to_broker ? 'Submitted' : 'No IBKR order was submitted'}</dd>
                 </div>
+                <div>
+                  <dt>Order intent execution mode</dt>
+                  <dd>Audit-only at recording</dd>
+                </div>
+                <div>
+                  <dt>Intent paper submission</dt>
+                  <dd>
+                    {orderIntent.paper_broker_submission_enabled
+                      ? 'IBKR paper submission enabled at recording'
+                      : 'IBKR paper submission disabled at recording'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Intent broker operation</dt>
+                  <dd>
+                    {orderIntent.broker_order_operation_available
+                      ? 'Broker order operation available at recording'
+                      : 'Broker order operation unavailable at recording'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Intent capability note</dt>
+                  <dd>{orderIntent.broker_submission_capability_message}</dd>
+                </div>
               </dl>
             </div>
           ) : null}
@@ -853,7 +877,13 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                 {orderIntentHistory.map((intent) => (
                   <li key={intent.id}>
                     {intent.symbol} {intent.side} {intent.quantity} — {intent.status}; no IBKR order
-                    was submitted
+                    was submitted;{' '}
+                    {intent.paper_broker_submission_enabled
+                      ? 'IBKR paper submission enabled at recording'
+                      : 'IBKR paper submission disabled at recording'};{' '}
+                    {intent.broker_order_operation_available
+                      ? 'broker order operation available at recording'
+                      : 'broker order operation unavailable at recording'}
                   </li>
                 ))}
               </ul>

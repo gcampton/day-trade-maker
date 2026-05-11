@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, HTTPException, status
 
 from day_trade_maker.schemas import (
@@ -33,7 +35,18 @@ def get_broker_capabilities() -> BrokerCapabilities:
 
 @router.get("/status", response_model=BrokerStatus)
 def get_broker_status() -> BrokerStatus:
+    host = os.environ.get("DAY_TRADE_MAKER_IBKR_HOST", "127.0.0.1")
+    port = int(os.environ.get("DAY_TRADE_MAKER_IBKR_PORT", "4002"))
+    client_id = int(os.environ.get("DAY_TRADE_MAKER_IBKR_CLIENT_ID", "1"))
+
     return BrokerStatus(
+        configured_host=host,
+        configured_port=port,
+        configured_client_id=client_id,
+        connection_diagnostic=(
+            f"Configured for IBKR paper gateway at {host}:{port} with client id {client_id}; "
+            "connection probing is read-only and not yet active."
+        ),
         message="IBKR read-only scaffold is configured; no broker session is connected.",
     )
 

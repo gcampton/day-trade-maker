@@ -154,6 +154,11 @@ const brokerStatus = {
   account_id: null,
   net_liquidation: null,
   currency: 'USD',
+  configured_host: '127.0.0.1',
+  configured_port: 4002,
+  configured_client_id: 17,
+  connection_diagnostic:
+    'Configured for IBKR paper gateway at 127.0.0.1:4002 with client id 17; connection probing is read-only and not yet active.',
   message: 'IBKR read-only scaffold is configured; no broker session is connected.',
 };
 
@@ -440,6 +445,20 @@ describe('App', () => {
     expect(screen.getAllByText(/interactive brokers/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/paper mode/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/read-only/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);
+  });
+
+  it('shows the configured IBKR paper gateway diagnostics without enabling orders', async () => {
+    mockTradingApi();
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
+
+    expect(await screen.findByText(/configured ibkr gateway/i)).toBeInTheDocument();
+    expect(screen.getByText('127.0.0.1:4002')).toBeInTheDocument();
+    expect(screen.getByText('17')).toBeInTheDocument();
+    expect(screen.getByText(/connection probing is read-only and not yet active/i)).toBeInTheDocument();
     expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);
   });
 

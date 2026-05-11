@@ -563,6 +563,20 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                     : 'Order submission disabled'}
                 </dd>
               </div>
+              <div>
+                <dt>Configured IBKR gateway</dt>
+                <dd>
+                  {brokerStatus.configured_host}:{brokerStatus.configured_port}
+                </dd>
+              </div>
+              <div>
+                <dt>Client ID</dt>
+                <dd>{brokerStatus.configured_client_id}</dd>
+              </div>
+              <div>
+                <dt>Connection diagnostic</dt>
+                <dd>{brokerStatus.connection_diagnostic}</dd>
+              </div>
             </dl>
           ) : null}
 

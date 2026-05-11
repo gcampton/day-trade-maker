@@ -165,6 +165,10 @@ class BrokerStatus(BaseModel):
     account_id: str | None = None
     net_liquidation: float | None = None
     currency: str = "USD"
+    configured_host: str
+    configured_port: int
+    configured_client_id: int
+    connection_diagnostic: str
     message: str
 
 

@@ -129,6 +129,10 @@ export type BrokerStatus = {
   account_id: string | null;
   net_liquidation: number | null;
   currency: string;
+  configured_host: string;
+  configured_port: number;
+  configured_client_id: number;
+  connection_diagnostic: string;
   message: string;
 };
 

@@ -204,7 +204,7 @@ class BrokerConnectivityProbe(BaseModel):
 
 class BrokerCapabilities(BaseModel):
     provider: Literal["interactive_brokers"] = "interactive_brokers"
-    current_execution_mode: Literal["audit_only"] = "audit_only"
+    current_execution_mode: Literal["audit_only", "paper_broker"] = "audit_only"
     supports_order_intents: bool = True
     supports_paper_broker_submission: bool = False
     supports_live_broker_submission: bool = False
@@ -214,7 +214,7 @@ class BrokerCapabilities(BaseModel):
 
 class BrokerOrderSubmissionCapability(BaseModel):
     provider: Literal["interactive_brokers"] = "interactive_brokers"
-    current_execution_mode: Literal["audit_only"] = "audit_only"
+    current_execution_mode: Literal["audit_only", "paper_broker"] = "audit_only"
     order_intents_supported: bool = True
     paper_broker_submission_implemented: bool = False
     paper_broker_submission_enabled: bool = False
@@ -227,7 +227,7 @@ class BrokerOrderSubmissionCapability(BaseModel):
 class BrokerSafetySummary(BaseModel):
     provider: Literal["interactive_brokers"] = "interactive_brokers"
     mode: Literal["paper"] = "paper"
-    current_execution_mode: Literal["audit_only"] = "audit_only"
+    current_execution_mode: Literal["audit_only", "paper_broker"] = "audit_only"
     connection_status: Literal["not_connected", "connected"] = "not_connected"
     read_only: bool = True
     order_submission_enabled: bool = False
@@ -284,9 +284,9 @@ class PaperOrderIntent(BaseModel):
     risk_check_id: int
     symbol: str
     side: Literal["buy", "sell"]
-    quantity: int
+    quantity: int = Field(gt=0)
     order_type: Literal["market", "limit"]
-    limit_price: float | None = None
+    limit_price: float | None = Field(default=None, gt=0)
     paper_mode: bool
     user_confirmed: bool
     status: Literal["created_not_submitted"] = "created_not_submitted"
@@ -307,6 +307,39 @@ class PaperOrderIntent(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class PaperBrokerOrderSubmissionCreate(BaseModel):
+    order_intent_id: int = Field(gt=0)
+    user_confirmed: bool
+    confirmation_phrase: NonEmptyString
+
+    @field_validator("confirmation_phrase")
+    @classmethod
+    def reject_blank_confirmation_phrase(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be blank")
+        return value
+
+
+class PaperBrokerOrderSubmission(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    order_intent_id: int
+    status: Literal["submitted_to_paper_broker"] = "submitted_to_paper_broker"
+    submitted_to_broker: bool = True
+    broker_order_id: str | None = None
+    current_execution_mode: Literal["paper_broker"] = "paper_broker"
+    paper_broker_submission_enabled: bool = True
+    live_broker_submission_enabled: bool = False
+    order_intent_snapshot: PaperOrderIntent | None = None
+    capability_snapshot: BrokerOrderSubmissionCapability | None = None
+    broker_request: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    broker_response: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    checks: list[str]
+    message: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class AuditSnapshot(BaseModel):
     version: Literal[1] = 1
     exported_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -316,6 +349,9 @@ class AuditSnapshot(BaseModel):
     backtests: list[BacktestRun] = Field(default_factory=list)
     risk_checks: list[RiskCheckRun] = Field(default_factory=list)
     paper_order_intents: list[PaperOrderIntent] = Field(default_factory=list)
+    paper_broker_order_submissions: list[PaperBrokerOrderSubmission] = Field(
+        default_factory=list
+    )
 
 
 class AuditImportSummary(BaseModel):
@@ -326,6 +362,7 @@ class AuditImportSummary(BaseModel):
     backtest_count: int
     risk_check_count: int
     paper_order_intent_count: int
+    paper_broker_order_submission_count: int = 0
     message: str
 
 
@@ -350,3 +387,4 @@ class AuditPersistenceStatus(BaseModel):
     backtest_count: int
     risk_check_count: int
     paper_order_intent_count: int
+    paper_broker_order_submission_count: int = 0

@@ -8,8 +8,10 @@ from day_trade_maker.broker import (
     SocketConnectivityProbe,
     StaticAccountSnapshotReader,
     build_account_snapshot_reader,
+    build_order_submission_capability,
     build_read_only_broker_status,
 )
+from day_trade_maker.schemas import BrokerAccountSnapshot
 
 
 @contextmanager
@@ -35,6 +37,9 @@ def test_env_broker_settings_reads_safe_defaults() -> None:
     assert settings.connectivity_probe_timeout_seconds == 1.0
     assert settings.account_snapshot_enabled is False
     assert settings.account_snapshot_reader == "static"
+    assert settings.paper_order_submission_enabled is False
+    assert settings.paper_order_submission_confirmation_phrase == "SUBMIT IBKR PAPER ORDER"
+    assert settings.paper_account_id is None
 
 
 def test_env_broker_settings_reads_opt_in_probe_configuration() -> None:
@@ -47,6 +52,9 @@ def test_env_broker_settings_reads_opt_in_probe_configuration() -> None:
             "DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_TIMEOUT_SECONDS": "0.25",
             "DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_ENABLED": "true",
             "DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_READER": "ib_async",
+            "DAY_TRADE_MAKER_IBKR_PAPER_ORDER_SUBMISSION_ENABLED": "true",
+            "DAY_TRADE_MAKER_IBKR_PAPER_ORDER_CONFIRMATION_PHRASE": "TYPE PAPER SUBMIT",
+            "DAY_TRADE_MAKER_IBKR_PAPER_ACCOUNT_ID": "DU1234567",
         }
     ):
         settings = EnvBrokerSettings.from_environment()
@@ -58,6 +66,144 @@ def test_env_broker_settings_reads_opt_in_probe_configuration() -> None:
     assert settings.connectivity_probe_timeout_seconds == 0.25
     assert settings.account_snapshot_enabled is True
     assert settings.account_snapshot_reader == "ib_async"
+    assert settings.paper_order_submission_enabled is True
+    assert settings.paper_order_submission_confirmation_phrase == "TYPE PAPER SUBMIT"
+    assert settings.paper_account_id == "DU1234567"
+
+
+def test_order_submission_capability_disabled_default_stays_audit_only() -> None:
+    capability = build_order_submission_capability(EnvBrokerSettings())
+
+    assert capability.current_execution_mode == "audit_only"
+    assert capability.order_intents_supported is True
+    assert capability.paper_broker_submission_implemented is False
+    assert capability.paper_broker_submission_enabled is False
+    assert capability.live_broker_submission_implemented is False
+    assert capability.live_broker_submission_enabled is False
+    assert capability.broker_order_operation_available is False
+    assert capability.message == (
+        "IBKR paper order submission is not implemented or enabled; "
+        "this app only records audit-only paper order intents."
+    )
+
+
+def test_order_submission_capability_requires_loaded_ib_async_account_snapshot() -> None:
+    settings = EnvBrokerSettings(
+        paper_order_submission_enabled=True,
+        account_snapshot_enabled=False,
+        account_snapshot_reader="static",
+    )
+
+    capability = build_order_submission_capability(settings)
+
+    assert capability.current_execution_mode == "audit_only"
+    assert capability.paper_broker_submission_implemented is True
+    assert capability.paper_broker_submission_enabled is False
+    assert capability.broker_order_operation_available is False
+    assert capability.live_broker_submission_enabled is False
+    assert capability.message == (
+        "IBKR paper order submission is configured but unavailable because a loaded "
+        "ib_async account snapshot is required; no broker order operation is available."
+    )
+
+
+def test_order_submission_capability_reports_available_only_for_loaded_paper_account() -> None:
+    settings = EnvBrokerSettings(
+        paper_order_submission_enabled=True,
+        account_snapshot_enabled=True,
+        account_snapshot_reader="ib_async",
+        paper_account_id="DU1234567",
+    )
+    account_snapshot = BrokerAccountSnapshot(
+        account_snapshot_enabled=True,
+        account_data_loaded=True,
+        account_reader="ib_async",
+        ibkr_client_dependency_available=True,
+        account_id="DU1234567",
+        message=(
+            "Read-only IBKR account snapshot loaded via ib_async; "
+            "no order operation was attempted."
+        ),
+    )
+
+    capability = build_order_submission_capability(settings, account_snapshot)
+
+    assert capability.current_execution_mode == "paper_broker"
+    assert capability.paper_broker_submission_implemented is True
+    assert capability.paper_broker_submission_enabled is True
+    assert capability.broker_order_operation_available is True
+    assert capability.live_broker_submission_implemented is False
+    assert capability.live_broker_submission_enabled is False
+    assert capability.message == (
+        "IBKR paper order submission is enabled for the configured paper account; "
+        "live trading remains disabled."
+    )
+
+
+def test_order_submission_capability_requires_ib_async_dependency_available() -> None:
+    settings = EnvBrokerSettings(
+        paper_order_submission_enabled=True,
+        account_snapshot_enabled=True,
+        account_snapshot_reader="ib_async",
+        paper_account_id="DU1234567",
+    )
+    account_snapshot = BrokerAccountSnapshot(
+        account_snapshot_enabled=True,
+        account_data_loaded=True,
+        account_reader="ib_async",
+        ibkr_client_dependency_available=False,
+        account_id="DU1234567",
+        message=(
+            "Read-only IBKR account snapshot loaded via ib_async; "
+            "no order operation was attempted."
+        ),
+    )
+
+    capability = build_order_submission_capability(settings, account_snapshot)
+
+    assert capability.current_execution_mode == "audit_only"
+    assert capability.paper_broker_submission_implemented is True
+    assert capability.paper_broker_submission_enabled is False
+    assert capability.broker_order_operation_available is False
+    assert capability.live_broker_submission_enabled is False
+    assert capability.message == (
+        "IBKR paper order submission is configured but unavailable because a loaded "
+        "ib_async account snapshot is required; no broker order operation is available."
+    )
+
+
+def test_order_submission_capability_requires_verified_paper_account_identity() -> None:
+    settings = EnvBrokerSettings(
+        paper_order_submission_enabled=True,
+        account_snapshot_enabled=True,
+        account_snapshot_reader="ib_async",
+        paper_account_id="DU1234567",
+    )
+
+    for account_id in [None, "U1234567", "DU7654321"]:
+        account_snapshot = BrokerAccountSnapshot(
+            account_snapshot_enabled=True,
+            account_data_loaded=True,
+            account_reader="ib_async",
+            ibkr_client_dependency_available=True,
+            account_id=account_id,
+            message=(
+                "Read-only IBKR account snapshot loaded via ib_async; "
+                "no order operation was attempted."
+            ),
+        )
+
+        capability = build_order_submission_capability(settings, account_snapshot)
+
+        assert capability.current_execution_mode == "audit_only"
+        assert capability.paper_broker_submission_enabled is False
+        assert capability.broker_order_operation_available is False
+        assert capability.live_broker_submission_enabled is False
+        assert capability.message == (
+            "IBKR paper order submission is configured but unavailable because the "
+            "loaded account is not the configured IBKR paper account; no broker order "
+            "operation is available."
+        )
 
 
 def test_socket_connectivity_probe_disabled_default_never_calls_socket_factory() -> None:

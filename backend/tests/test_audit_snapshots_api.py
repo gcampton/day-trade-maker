@@ -103,6 +103,22 @@ def test_import_audit_snapshot_replaces_in_memory_audit_state() -> None:
     snapshot = client.get("/api/audit/export").json()
     snapshot["transcripts"][0]["title"] = "Restored audit snapshot"
     snapshot["paper_order_intents"][0]["symbol"] = "MSFT"
+    snapshot["paper_broker_order_submissions"] = [
+        {
+            "id": 17,
+            "order_intent_id": snapshot["paper_order_intents"][0]["id"],
+            "status": "submitted_to_paper_broker",
+            "submitted_to_broker": True,
+            "broker_order_id": "12345",
+            "current_execution_mode": "paper_broker",
+            "paper_broker_submission_enabled": True,
+            "live_broker_submission_enabled": False,
+            "broker_response": {"broker_order_id": "12345", "status": "Submitted"},
+            "checks": ["paper broker submission enabled"],
+            "message": "IBKR paper order submitted; live trading remains disabled.",
+            "created_at": snapshot["exported_at"],
+        }
+    ]
 
     response = client.post("/api/audit/import", json=snapshot)
 
@@ -110,8 +126,11 @@ def test_import_audit_snapshot_replaces_in_memory_audit_state() -> None:
     body = response.json()
     assert body["transcript_count"] == len(snapshot["transcripts"])
     assert body["paper_order_intent_count"] == len(snapshot["paper_order_intents"])
+    assert body["paper_broker_order_submission_count"] == 1
     assert client.get("/api/transcripts").json()[0]["title"] == "Restored audit snapshot"
     assert client.get("/api/broker/order-intents").json()[0]["symbol"] == "MSFT"
+    exported = client.get("/api/audit/export").json()
+    assert exported["paper_broker_order_submissions"][0]["broker_order_id"] == "12345"
 
 
 def test_audit_status_exposes_local_persistence_location_and_counts() -> None:
@@ -127,6 +146,7 @@ def test_audit_status_exposes_local_persistence_location_and_counts() -> None:
     assert body["snapshot_exists"] is True
     assert body["transcript_count"] >= 1
     assert body["paper_order_intent_count"] >= 1
+    assert "paper_broker_order_submission_count" in body
 
 
 def test_reset_audit_state_requires_explicit_confirmation_and_clears_artifacts() -> None:
@@ -151,6 +171,7 @@ def test_reset_audit_state_requires_explicit_confirmation_and_clears_artifacts()
     assert body["backtest_count"] == 0
     assert body["risk_check_count"] == 0
     assert body["paper_order_intent_count"] == 0
+    assert body["paper_broker_order_submission_count"] == 0
     assert body["message"] == "Local audit state reset. No broker orders were touched."
     assert client.get("/api/audit/export").json()["transcripts"] == []
     assert client.get("/api/broker/order-intents").json() == []

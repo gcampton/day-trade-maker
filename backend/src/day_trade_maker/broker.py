@@ -6,7 +6,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from day_trade_maker.schemas import BrokerAccountSnapshot, BrokerConnectivityProbe, BrokerStatus
+from day_trade_maker.schemas import (
+    BrokerAccountSnapshot,
+    BrokerConnectivityProbe,
+    BrokerOrderSubmissionCapability,
+    BrokerStatus,
+)
 
 
 class ClosableSocket(Protocol):
@@ -25,6 +30,9 @@ class EnvBrokerSettings:
     connectivity_probe_timeout_seconds: float = 1.0
     account_snapshot_enabled: bool = False
     account_snapshot_reader: str = "static"
+    paper_order_submission_enabled: bool = False
+    paper_order_submission_confirmation_phrase: str = "SUBMIT IBKR PAPER ORDER"
+    paper_account_id: str | None = None
 
     @classmethod
     def from_environment(cls) -> EnvBrokerSettings:
@@ -44,11 +52,45 @@ class EnvBrokerSettings:
             account_snapshot_reader=os.environ.get(
                 "DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_READER", "static"
             ),
+            paper_order_submission_enabled=_env_flag_enabled(
+                "DAY_TRADE_MAKER_IBKR_PAPER_ORDER_SUBMISSION_ENABLED"
+            ),
+            paper_order_submission_confirmation_phrase=os.environ.get(
+                "DAY_TRADE_MAKER_IBKR_PAPER_ORDER_CONFIRMATION_PHRASE",
+                "SUBMIT IBKR PAPER ORDER",
+            ),
+            paper_account_id=_optional_env("DAY_TRADE_MAKER_IBKR_PAPER_ACCOUNT_ID"),
         )
 
 
 def _env_flag_enabled(name: str) -> bool:
     return os.environ.get(name, "").lower() in {"1", "true", "yes", "on"}
+
+
+def _optional_env(name: str) -> str | None:
+    value = os.environ.get(name)
+    if value is None:
+        return None
+    stripped = value.strip().upper()
+    return stripped or None
+
+
+def _is_verified_ibkr_paper_account(
+    settings: EnvBrokerSettings,
+    account_snapshot: BrokerAccountSnapshot,
+) -> bool:
+    configured_account = settings.paper_account_id
+    if account_snapshot.account_id:
+        loaded_account = account_snapshot.account_id.strip().upper()
+    else:
+        loaded_account = None
+    return (
+        configured_account is not None
+        and configured_account.startswith("DU")
+        and loaded_account is not None
+        and loaded_account.startswith("DU")
+        and loaded_account == configured_account
+    )
 
 
 def build_read_only_broker_status(settings: EnvBrokerSettings) -> BrokerStatus:
@@ -62,6 +104,56 @@ def build_read_only_broker_status(settings: EnvBrokerSettings) -> BrokerStatus:
             "connection probing is read-only and not yet active."
         ),
         message="IBKR read-only scaffold is configured; no broker session is connected.",
+    )
+
+
+def build_order_submission_capability(
+    settings: EnvBrokerSettings,
+    account_snapshot: BrokerAccountSnapshot | None = None,
+) -> BrokerOrderSubmissionCapability:
+    if not settings.paper_order_submission_enabled:
+        return BrokerOrderSubmissionCapability(
+            message=(
+                "IBKR paper order submission is not implemented or enabled; "
+                "this app only records audit-only paper order intents."
+            )
+        )
+
+    if (
+        not settings.account_snapshot_enabled
+        or settings.account_snapshot_reader != "ib_async"
+        or account_snapshot is None
+        or not account_snapshot.account_data_loaded
+        or account_snapshot.account_reader != "ib_async"
+        or not account_snapshot.ibkr_client_dependency_available
+    ):
+        return BrokerOrderSubmissionCapability(
+            paper_broker_submission_implemented=True,
+            message=(
+                "IBKR paper order submission is configured but unavailable because a loaded "
+                "ib_async account snapshot is required; no broker order operation is available."
+            ),
+        )
+
+    if not _is_verified_ibkr_paper_account(settings, account_snapshot):
+        return BrokerOrderSubmissionCapability(
+            paper_broker_submission_implemented=True,
+            message=(
+                "IBKR paper order submission is configured but unavailable because the "
+                "loaded account is not the configured IBKR paper account; no broker order "
+                "operation is available."
+            ),
+        )
+
+    return BrokerOrderSubmissionCapability(
+        current_execution_mode="paper_broker",
+        paper_broker_submission_implemented=True,
+        paper_broker_submission_enabled=True,
+        broker_order_operation_available=True,
+        message=(
+            "IBKR paper order submission is enabled for the configured paper account; "
+            "live trading remains disabled."
+        ),
     )
 
 

@@ -10,6 +10,7 @@ from day_trade_maker.stores import (
     audit_snapshot_repository,
     backtest_store,
     market_data_store,
+    paper_broker_order_submission_store,
     paper_order_intent_store,
     reset_all_audit_state,
     risk_check_store,
@@ -31,6 +32,7 @@ def get_audit_persistence_status() -> AuditPersistenceStatus:
         backtest_count=len(backtest_store.list()),
         risk_check_count=len(risk_check_store.list()),
         paper_order_intent_count=len(paper_order_intent_store.list()),
+        paper_broker_order_submission_count=len(paper_broker_order_submission_store.list()),
     )
 
 
@@ -43,6 +45,7 @@ def export_audit_snapshot() -> AuditSnapshot:
         backtests=backtest_store.list(),
         risk_checks=risk_check_store.list(),
         paper_order_intents=paper_order_intent_store.list(),
+        paper_broker_order_submissions=paper_broker_order_submission_store.list(),
     )
 
 
@@ -54,6 +57,7 @@ def import_audit_snapshot(snapshot: AuditSnapshot) -> AuditImportSummary:
     backtest_store.replace_all(snapshot.backtests)
     risk_check_store.replace_all(snapshot.risk_checks)
     paper_order_intent_store.replace_all(snapshot.paper_order_intents)
+    paper_broker_order_submission_store.replace_all(snapshot.paper_broker_order_submissions)
 
     return AuditImportSummary(
         transcript_count=len(snapshot.transcripts),
@@ -62,6 +66,7 @@ def import_audit_snapshot(snapshot: AuditSnapshot) -> AuditImportSummary:
         backtest_count=len(snapshot.backtests),
         risk_check_count=len(snapshot.risk_checks),
         paper_order_intent_count=len(snapshot.paper_order_intents),
+        paper_broker_order_submission_count=len(snapshot.paper_broker_order_submissions),
         message="Audit snapshot imported into in-memory stores.",
     )
 
@@ -77,5 +82,6 @@ def reset_audit_state(_: AuditResetRequest) -> AuditImportSummary:
         backtest_count=0,
         risk_check_count=0,
         paper_order_intent_count=0,
+        paper_broker_order_submission_count=0,
         message="Local audit state reset. No broker orders were touched.",
     )

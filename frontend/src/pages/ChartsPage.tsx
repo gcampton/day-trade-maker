@@ -1,11 +1,13 @@
 import { FormEvent, useEffect, useState } from 'react';
 
 import {
+  createPaperBrokerOrderSubmission,
   createPaperOrderIntent,
   exportAuditSnapshot,
   getAuditPersistenceStatus,
   getBrokerSafetySummary,
   getMarketDataCandles,
+  getPaperBrokerOrderSubmissions,
   getPaperOrderIntents,
   importAuditSnapshot,
   importMarketDataCsv,
@@ -23,6 +25,7 @@ import {
   type BrokerSafetySummary,
   type BrokerStatus,
   type MarketDataDatasetSummary,
+  type PaperBrokerOrderSubmission,
   type PaperOrderIntent,
   type RiskCheckRun,
   type StrategyCandidate,
@@ -48,6 +51,8 @@ const exampleCsv = `timestamp,open,high,low,close,volume
 2026-05-10T14:35:00Z,101,103,100.5,102,200000
 `;
 
+const paperBrokerSubmissionConfirmationPhrase = 'SUBMIT IBKR PAPER ORDER';
+
 type ChartsPageProps = {
   selectedStrategy: StrategyCandidate | null;
 };
@@ -69,6 +74,9 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [brokerConnectivityProbe, setBrokerConnectivityProbe] = useState<BrokerConnectivityProbe | null>(null);
   const [orderIntent, setOrderIntent] = useState<PaperOrderIntent | null>(null);
   const [orderIntentHistory, setOrderIntentHistory] = useState<PaperOrderIntent[]>([]);
+  const [paperBrokerSubmission, setPaperBrokerSubmission] = useState<PaperBrokerOrderSubmission | null>(null);
+  const [paperBrokerSubmissionHistory, setPaperBrokerSubmissionHistory] = useState<PaperBrokerOrderSubmission[]>([]);
+  const [paperSubmissionConfirmationPhrase, setPaperSubmissionConfirmationPhrase] = useState('');
   const [auditSnapshotJson, setAuditSnapshotJson] = useState('');
   const [auditMessage, setAuditMessage] = useState<string | null>(null);
   const [auditPersistenceStatus, setAuditPersistenceStatus] = useState<AuditPersistenceStatus | null>(null);
@@ -82,6 +90,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [isRunningRiskCheck, setIsRunningRiskCheck] = useState(false);
   const [isLoadingBrokerStatus, setIsLoadingBrokerStatus] = useState(false);
   const [isCreatingOrderIntent, setIsCreatingOrderIntent] = useState(false);
+  const [isSubmittingPaperBrokerOrder, setIsSubmittingPaperBrokerOrder] = useState(false);
   const [isExportingAudit, setIsExportingAudit] = useState(false);
   const [isImportingAudit, setIsImportingAudit] = useState(false);
   const [isResettingAudit, setIsResettingAudit] = useState(false);
@@ -137,6 +146,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     }
 
     setOrderIntentHistory(snapshot.paper_order_intents);
+    setPaperBrokerSubmissionHistory(snapshot.paper_broker_order_submissions);
+    setPaperBrokerSubmission(snapshot.paper_broker_order_submissions.at(-1) ?? null);
     const latestOrderIntent = snapshot.paper_order_intents.at(-1);
     if (latestOrderIntent) {
       setOrderIntent(latestOrderIntent);
@@ -152,6 +163,9 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     setRiskCheck(null);
     setOrderIntent(null);
     setOrderIntentHistory([]);
+    setPaperBrokerSubmission(null);
+    setPaperBrokerSubmissionHistory([]);
+    setPaperSubmissionConfirmationPhrase('');
     setAuditSnapshotJson('');
     setCandles(sampleCandles);
     setSymbol('AAPL');
@@ -174,6 +188,9 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       setRiskCheck(null);
       setOrderIntent(null);
       setOrderIntentHistory([]);
+      setPaperBrokerSubmission(null);
+      setPaperBrokerSubmissionHistory([]);
+      setPaperSubmissionConfirmationPhrase('');
       setCandles(
         loadedCandles.map((candle) => ({
           ...candle,
@@ -205,6 +222,9 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       setRiskCheck(null);
       setOrderIntent(null);
       setOrderIntentHistory([]);
+      setPaperBrokerSubmission(null);
+      setPaperBrokerSubmissionHistory([]);
+      setPaperSubmissionConfirmationPhrase('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run backtest');
     } finally {
@@ -230,6 +250,9 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       setRiskCheck(created);
       setOrderIntent(null);
       setOrderIntentHistory([]);
+      setPaperBrokerSubmission(null);
+      setPaperBrokerSubmissionHistory([]);
+      setPaperSubmissionConfirmationPhrase('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run broker readiness check');
     } finally {
@@ -284,11 +307,37 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
         user_confirmed: true,
       });
       setOrderIntent(created);
+      setPaperBrokerSubmission(null);
+      setPaperSubmissionConfirmationPhrase('');
       setOrderIntentHistory(await getPaperOrderIntents());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to record paper order intent');
     } finally {
       setIsCreatingOrderIntent(false);
+    }
+  }
+
+  async function handleSubmitPaperBrokerOrder() {
+    if (!orderIntent || paperSubmissionConfirmationPhrase !== paperBrokerSubmissionConfirmationPhrase) {
+      return;
+    }
+
+    setError(null);
+    setIsSubmittingPaperBrokerOrder(true);
+
+    try {
+      const created = await createPaperBrokerOrderSubmission({
+        order_intent_id: orderIntent.id,
+        user_confirmed: true,
+        confirmation_phrase: paperSubmissionConfirmationPhrase,
+      });
+      setPaperBrokerSubmission(created);
+      setPaperBrokerSubmissionHistory(await getPaperBrokerOrderSubmissions());
+      setPaperSubmissionConfirmationPhrase('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit to IBKR paper account');
+    } finally {
+      setIsSubmittingPaperBrokerOrder(false);
     }
   }
 
@@ -344,6 +393,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
               backtest_count: 0,
               risk_check_count: 0,
               paper_order_intent_count: 0,
+              paper_broker_order_submission_count: 0,
             }
           : current,
       );
@@ -364,6 +414,21 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const parsedOrderQuantity = Number(orderQuantity);
   const isOrderTicketValid = orderSymbol.trim().length > 0 && Number.isInteger(parsedOrderQuantity) && parsedOrderQuantity > 0;
   const canResetAuditState = resetConfirmation === 'RESET LOCAL AUDIT STATE';
+  const currentIntentPaperBrokerSubmission = orderIntent
+    ? (paperBrokerSubmissionHistory.find((submission) => submission.order_intent_id === orderIntent.id) ?? paperBrokerSubmission)
+    : null;
+  const isPaperBrokerSubmissionEnabled = Boolean(
+    brokerOrderSubmissionCapability?.paper_broker_submission_enabled &&
+      brokerOrderSubmissionCapability.broker_order_operation_available &&
+      !brokerOrderSubmissionCapability.live_broker_submission_enabled,
+  );
+  const canSubmitPaperBrokerOrder = Boolean(
+    orderIntent &&
+      isPaperBrokerSubmissionEnabled &&
+      !currentIntentPaperBrokerSubmission &&
+      paperSubmissionConfirmationPhrase === paperBrokerSubmissionConfirmationPhrase &&
+      !isSubmittingPaperBrokerOrder,
+  );
 
   return (
     <section className="chart-workspace-grid" aria-label="Market data chart workspace">
@@ -412,8 +477,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
           <p className="eyebrow">Audit Archive</p>
           <h2>Export/import local audit snapshot</h2>
           <p>
-            Copy this JSON to save transcripts, strategies, datasets, backtests, risk checks, and
-            paper order intents before a real database is wired in.
+            Copy this JSON to save transcripts, strategies, datasets, backtests, risk checks,
+            audit-only paper order intents, and IBKR paper broker submission records.
           </p>
         </div>
 
@@ -456,7 +521,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
               <dt>Saved artifacts</dt>
               <dd>
                 {auditPersistenceStatus.transcript_count} transcript;{' '}
-                {auditPersistenceStatus.paper_order_intent_count} order intent
+                {auditPersistenceStatus.paper_order_intent_count} order intent;{' '}
+                {auditPersistenceStatus.paper_broker_order_submission_count} paper broker submission
               </dd>
             </div>
           </dl>
@@ -466,8 +532,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
           <h3>Reset local audit state</h3>
           <p>
             This clears persisted local transcripts, strategies, datasets, backtests, risk checks,
-            and audit-only paper order intents. It does not touch broker accounts or submit/cancel
-            IBKR orders.
+            audit-only paper order intents, and IBKR paper broker submission records. It does not
+            touch broker accounts or submit/cancel IBKR orders.
           </p>
         </div>
         <label>
@@ -900,6 +966,68 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
             </div>
           ) : null}
 
+          {orderIntent ? (
+            <section className="backtest-panel" aria-label="IBKR paper broker submission">
+              <div className="form-heading">
+                <p className="eyebrow">IBKR Paper Account Submission</p>
+                <h3>Submit audit intent to IBKR paper account</h3>
+                <p>This order intent is an audit artifact only; no broker order was submitted.</p>
+              </div>
+
+              {isPaperBrokerSubmissionEnabled && !currentIntentPaperBrokerSubmission ? (
+                <>
+                  <p className="error">
+                    This submits to the configured IBKR paper account only. Live trading is not supported.
+                  </p>
+                  <label>
+                    Type SUBMIT IBKR PAPER ORDER to confirm
+                    <input
+                      value={paperSubmissionConfirmationPhrase}
+                      onChange={(event) => setPaperSubmissionConfirmationPhrase(event.target.value)}
+                      placeholder={paperBrokerSubmissionConfirmationPhrase}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={!canSubmitPaperBrokerOrder}
+                    onClick={handleSubmitPaperBrokerOrder}
+                  >
+                    {isSubmittingPaperBrokerOrder
+                      ? 'Submitting to IBKR paper account…'
+                      : 'Submit to IBKR paper account'}
+                  </button>
+                </>
+              ) : (
+                <p className="muted">IBKR paper order submission disabled</p>
+              )}
+
+              <p className="muted">Live trading is not supported.</p>
+
+              {currentIntentPaperBrokerSubmission ? (
+                <div className="success">
+                  <p>IBKR paper broker order submitted</p>
+                  <p>Broker order id: {currentIntentPaperBrokerSubmission.broker_order_id ?? 'pending'}</p>
+                  <p>Status: {currentIntentPaperBrokerSubmission.status}</p>
+                  <p>{currentIntentPaperBrokerSubmission.message}</p>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {paperBrokerSubmissionHistory.length > 0 ? (
+            <section aria-label="IBKR paper broker submission history">
+              <h3>IBKR paper broker submission history</h3>
+              <ul>
+                {paperBrokerSubmissionHistory.map((submission) => (
+                  <li key={submission.id}>
+                    Broker order {submission.broker_order_id ?? 'pending'} — {submission.status}; live
+                    trading disabled; source intent #{submission.order_intent_id}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
           {orderIntentHistory.length > 0 ? (
             <section aria-label="Paper order intent audit log">
               <h3>Paper order intent audit log</h3>
@@ -932,13 +1060,13 @@ function formatUsd(value: number): string {
 }
 
 function formatAuditSnapshotMessage(action: string, snapshot: AuditSnapshot): string {
-  return `${action} audit snapshot with ${snapshot.transcripts.length} transcript and ${snapshot.paper_order_intents.length} order intent`;
+  return `${action} audit snapshot with ${snapshot.transcripts.length} transcript, ${snapshot.paper_order_intents.length} order intent, and ${snapshot.paper_broker_order_submissions.length} paper broker submission`;
 }
 
 function formatAuditImportSummary(summary: AuditImportSummary): string {
-  return `Imported audit snapshot with ${summary.transcript_count} transcript and ${summary.paper_order_intent_count} order intent`;
+  return `Imported audit snapshot with ${summary.transcript_count} transcript, ${summary.paper_order_intent_count} order intent, and ${summary.paper_broker_order_submission_count} paper broker submission`;
 }
 
 function formatAuditResetSummary(summary: AuditImportSummary): string {
-  return `${summary.message} ${summary.transcript_count} transcript and ${summary.paper_order_intent_count} order intent remain.`;
+  return `${summary.message} ${summary.transcript_count} transcript, ${summary.paper_order_intent_count} order intent, and ${summary.paper_broker_order_submission_count} paper broker submission remain.`;
 }

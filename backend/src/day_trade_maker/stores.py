@@ -10,6 +10,7 @@ from day_trade_maker.schemas import (
     BacktestRun,
     BrokerOrderSubmissionCapability,
     MarketDataDataset,
+    PaperBrokerOrderSubmission,
     PaperOrderIntent,
     PaperOrderIntentCreate,
     RiskCheckRun,
@@ -229,12 +230,68 @@ class PaperOrderIntentStore:
         persist_all()
         return saved
 
+    def get(self, order_intent_id: int) -> PaperOrderIntent | None:
+        return next(
+            (intent for intent in self._order_intents if intent.id == order_intent_id),
+            None,
+        )
+
     def list(self) -> list[PaperOrderIntent]:
         return list(self._order_intents)
 
     def replace_all(self, order_intents: list[PaperOrderIntent]) -> None:
         self._order_intents = list(order_intents)
         self._next_id = next_id(order_intents)
+        persist_all()
+
+
+class PaperBrokerOrderSubmissionStore:
+    def __init__(
+        self,
+        submissions: list[PaperBrokerOrderSubmission] | None = None,
+    ) -> None:
+        self._submissions: list[PaperBrokerOrderSubmission] = list(submissions or [])
+        self._next_id = next_id(self._submissions)
+
+    def create(
+        self,
+        order_intent_id: int,
+        broker_order_id: str | None,
+        broker_response: dict[str, str | int | float | bool | None],
+        checks: list[str],
+        message: str,
+        order_intent_snapshot: PaperOrderIntent | None = None,
+        capability_snapshot: BrokerOrderSubmissionCapability | None = None,
+        broker_request: dict[str, str | int | float | bool | None] | None = None,
+    ) -> PaperBrokerOrderSubmission:
+        saved = PaperBrokerOrderSubmission(
+            id=self._next_id,
+            order_intent_id=order_intent_id,
+            broker_order_id=broker_order_id,
+            order_intent_snapshot=order_intent_snapshot,
+            capability_snapshot=capability_snapshot,
+            broker_request=broker_request or {},
+            broker_response=broker_response,
+            checks=checks,
+            message=message,
+        )
+        self._next_id += 1
+        self._submissions.append(saved)
+        persist_all()
+        return saved
+
+    def list(self) -> list[PaperBrokerOrderSubmission]:
+        return list(self._submissions)
+
+    def get(self, submission_id: int) -> PaperBrokerOrderSubmission | None:
+        return next(
+            (submission for submission in self._submissions if submission.id == submission_id),
+            None,
+        )
+
+    def replace_all(self, submissions: list[PaperBrokerOrderSubmission]) -> None:
+        self._submissions = list(submissions)
+        self._next_id = next_id(submissions)
         persist_all()
 
 
@@ -251,6 +308,9 @@ market_data_store = MarketDataStore(_initial_snapshot.market_data)
 backtest_store = BacktestStore(_initial_snapshot.backtests)
 risk_check_store = RiskCheckStore(_initial_snapshot.risk_checks)
 paper_order_intent_store = PaperOrderIntentStore(_initial_snapshot.paper_order_intents)
+paper_broker_order_submission_store = PaperBrokerOrderSubmissionStore(
+    _initial_snapshot.paper_broker_order_submissions
+)
 
 
 def current_snapshot() -> AuditSnapshot:
@@ -261,6 +321,7 @@ def current_snapshot() -> AuditSnapshot:
         backtests=backtest_store.list(),
         risk_checks=risk_check_store.list(),
         paper_order_intents=paper_order_intent_store.list(),
+        paper_broker_order_submissions=paper_broker_order_submission_store.list(),
     )
 
 
@@ -277,6 +338,8 @@ def reset_all_audit_state() -> AuditSnapshot:
     risk_check_store._next_id = 1
     paper_order_intent_store._order_intents = []
     paper_order_intent_store._next_id = 1
+    paper_broker_order_submission_store._submissions = []
+    paper_broker_order_submission_store._next_id = 1
     empty_snapshot = current_snapshot()
     audit_snapshot_repository.save(empty_snapshot)
     return empty_snapshot

@@ -3,6 +3,8 @@ import socket
 from fastapi.testclient import TestClient
 
 from day_trade_maker.api import app
+from day_trade_maker.routes import broker as broker_routes
+from day_trade_maker.schemas import BrokerAccountSnapshot
 
 
 def test_get_broker_status_exposes_safe_env_driven_ibkr_connection_config(monkeypatch) -> None:
@@ -248,4 +250,48 @@ def test_get_broker_safety_summary_aggregates_read_only_broker_boundaries(monkey
     assert body["message"] == (
         "Broker safety summary is read-only and audit-only; no IBKR account, connectivity, "
         "or order-submission state permits broker orders."
+    )
+
+
+def test_get_broker_safety_summary_message_reflects_enabled_paper_submission(monkeypatch) -> None:
+    class FakeAccountSnapshotReader:
+        def read(self, settings):
+            return BrokerAccountSnapshot(
+                account_snapshot_enabled=True,
+                account_data_loaded=True,
+                account_reader="ib_async",
+                ibkr_client_dependency_available=True,
+                account_id="DU1234567",
+                message=(
+                    "Read-only IBKR account snapshot loaded via ib_async; "
+                    "no order operation was attempted."
+                ),
+            )
+
+    monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_PAPER_ORDER_SUBMISSION_ENABLED", "true")
+    monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_PAPER_ACCOUNT_ID", "DU1234567")
+    monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_ENABLED", "true")
+    monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_READER", "ib_async")
+    monkeypatch.setattr(
+        broker_routes,
+        "build_account_snapshot_reader",
+        lambda _settings: FakeAccountSnapshotReader(),
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/broker/safety-summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["current_execution_mode"] == "paper_broker"
+    assert body["order_submission_enabled"] is True
+    assert body["paper_broker_submission_enabled"] is True
+    assert body["broker_order_operation_available"] is True
+    assert body["live_broker_submission_enabled"] is False
+    assert body["read_only"] is False
+    assert body["capabilities"]["supports_paper_broker_submission"] is True
+    assert body["capabilities"]["order_submission_enabled"] is True
+    assert body["message"] == (
+        "Broker safety summary permits IBKR paper-account order submission only; "
+        "live trading remains disabled."
     )

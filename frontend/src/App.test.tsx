@@ -253,6 +253,56 @@ const brokerSafetySummary = {
     'Broker safety summary is read-only and audit-only; no IBKR account, connectivity, or order-submission state permits broker orders.',
 };
 
+const enabledBrokerOrderSubmissionCapability = {
+  ...brokerOrderSubmissionCapability,
+  current_execution_mode: 'paper_broker',
+  paper_broker_submission_implemented: true,
+  paper_broker_submission_enabled: true,
+  broker_order_operation_available: true,
+  message:
+    'IBKR paper order submission is enabled for the configured paper account; live trading remains disabled.',
+};
+
+const enabledBrokerCapabilities = {
+  ...brokerCapabilities,
+  current_execution_mode: 'paper_broker',
+  supports_paper_broker_submission: true,
+  order_submission_enabled: true,
+  message:
+    'Current broker mode permits IBKR paper-account order submission only; live trading remains disabled.',
+};
+
+const enabledBrokerAccount = {
+  ...brokerAccount,
+  account_snapshot_enabled: true,
+  account_data_loaded: true,
+  account_reader: 'ib_async',
+  ibkr_client_dependency_available: true,
+  account_id: 'DU1234567',
+  message:
+    'Read-only IBKR account snapshot loaded via ib_async; no order operation was attempted.',
+};
+
+const enabledBrokerSafetySummary = {
+  ...brokerSafetySummary,
+  current_execution_mode: 'paper_broker',
+  read_only: false,
+  order_submission_enabled: true,
+  paper_broker_submission_implemented: true,
+  paper_broker_submission_enabled: true,
+  broker_order_operation_available: true,
+  account_snapshot_enabled: true,
+  account_data_loaded: true,
+  account_reader: 'ib_async',
+  ibkr_client_dependency_available: true,
+  account_id: 'DU1234567',
+  account: enabledBrokerAccount,
+  capabilities: enabledBrokerCapabilities,
+  order_submission_capability: enabledBrokerOrderSubmissionCapability,
+  message:
+    'Broker safety summary permits IBKR paper-account order submission only; live trading remains disabled.',
+};
+
 const createdOrderIntent = {
   id: 1,
   strategy_id: 1,
@@ -288,6 +338,50 @@ const createdOrderIntent = {
 
 const orderIntentHistory = [createdOrderIntent];
 
+const createdPaperBrokerOrderSubmission = {
+  id: 1,
+  order_intent_id: 1,
+  status: 'submitted_to_paper_broker',
+  submitted_to_broker: true,
+  broker_order_id: '12345',
+  current_execution_mode: 'paper_broker',
+  paper_broker_submission_enabled: true,
+  live_broker_submission_enabled: false,
+  order_intent_snapshot: createdOrderIntent,
+  capability_snapshot: enabledBrokerOrderSubmissionCapability,
+  broker_request: {
+    symbol: 'AAPL',
+    side: 'buy',
+    quantity: 10,
+    order_type: 'market',
+    limit_price: null,
+  },
+  broker_response: { broker_order_id: '12345', status: 'Submitted' },
+  checks: [
+    'approved strategy',
+    'passed risk check',
+    'source order intent confirmed audit-only',
+    'paper broker submission enabled',
+    'live broker submission disabled',
+  ],
+  message: 'IBKR paper order submitted; live trading remains disabled.',
+  created_at: '2026-05-10T18:26:00Z',
+};
+
+const paperBrokerSubmissionHistory = [createdPaperBrokerOrderSubmission];
+
+const auditSnapshotWithoutPaperBrokerSubmissions = {
+  version: 1,
+  exported_at: '2026-05-10T18:25:00Z',
+  transcripts: [savedTranscript],
+  strategies: [approvedStrategy],
+  market_data: [{ ...importedDataset, candles: importedCandles }],
+  backtests: [createdBacktest],
+  risk_checks: [createdRiskCheck],
+  paper_order_intents: [createdOrderIntent],
+  paper_broker_order_submissions: [],
+};
+
 const auditSnapshot = {
   version: 1,
   exported_at: '2026-05-10T18:25:00Z',
@@ -297,6 +391,7 @@ const auditSnapshot = {
   backtests: [createdBacktest],
   risk_checks: [createdRiskCheck],
   paper_order_intents: [createdOrderIntent],
+  paper_broker_order_submissions: paperBrokerSubmissionHistory,
 };
 
 const auditImportSummary = {
@@ -307,6 +402,7 @@ const auditImportSummary = {
   backtest_count: 1,
   risk_check_count: 1,
   paper_order_intent_count: 1,
+  paper_broker_order_submission_count: 1,
   message: 'Audit snapshot imported into in-memory stores.',
 };
 
@@ -318,6 +414,7 @@ const auditResetSummary = {
   backtest_count: 0,
   risk_check_count: 0,
   paper_order_intent_count: 0,
+  paper_broker_order_submission_count: 0,
   message: 'Local audit state reset. No broker orders were touched.',
 };
 
@@ -325,6 +422,22 @@ const importedMsftAuditSnapshot = {
   ...auditSnapshot,
   market_data: [{ ...importedDataset, symbol: 'MSFT', candles: importedCandles }],
   paper_order_intents: [{ ...createdOrderIntent, symbol: 'MSFT', side: 'sell', quantity: 3 }],
+  paper_broker_order_submissions: [
+    {
+      ...createdPaperBrokerOrderSubmission,
+      id: 2,
+      order_intent_id: 1,
+      broker_order_id: 'MSFT-200',
+      broker_response: { broker_order_id: 'MSFT-200', status: 'Submitted' },
+      broker_request: {
+        symbol: 'MSFT',
+        side: 'sell',
+        quantity: 3,
+        order_type: 'market',
+        limit_price: null,
+      },
+    },
+  ],
 };
 
 const auditStatus = {
@@ -337,6 +450,7 @@ const auditStatus = {
   backtest_count: 1,
   risk_check_count: 1,
   paper_order_intent_count: 1,
+  paper_broker_order_submission_count: 1,
 };
 
 afterEach(() => {
@@ -410,6 +524,7 @@ describe('App', () => {
     expect(screen.getByText(/audit.sqlite3/i)).toBeInTheDocument();
     expect(screen.getByText(/1 transcript/i)).toBeInTheDocument();
     expect(screen.getByText(/1 order intent/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 paper broker submission/i)).toBeInTheDocument();
   });
 
   it('submits a pasted transcript to the backend', async () => {
@@ -575,7 +690,7 @@ describe('App', () => {
     });
     expect(await screen.findByText(/paper order submission implementation/i)).toBeInTheDocument();
     expect(screen.getByText(/ibkr paper order submission not implemented/i)).toBeInTheDocument();
-    expect(screen.getByText(/ibkr paper order submission disabled/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/ibkr paper order submission disabled/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/ibkr live order submission disabled/i)).toBeInTheDocument();
     expect(screen.getAllByText(/only records audit-only paper order intents/i).length).toBeGreaterThan(0);
   });
@@ -694,6 +809,75 @@ describe('App', () => {
     expect(screen.getByText(/AAPL buy 10/i)).toBeInTheDocument();
   });
 
+  it('renders disabled IBKR paper submission copy for an audit-only order intent', async () => {
+    mockTradingApi({
+      auditSnapshot: auditSnapshotWithoutPaperBrokerSubmissions,
+      paperBrokerOrderSubmissions: [],
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText(/ibkr paper order submission disabled/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/this order intent is an audit artifact only; no broker order was submitted/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/live trading is not supported/i).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /submit to ibkr paper account/i })).not.toBeInTheDocument();
+  });
+
+  it('requires the exact phrase before submitting an order intent to the IBKR paper account', async () => {
+    const fetchMock = mockTradingApi({
+      auditSnapshot: auditSnapshotWithoutPaperBrokerSubmissions,
+      brokerSafetySummary: enabledBrokerSafetySummary,
+      paperBrokerOrderSubmissions: [createdPaperBrokerOrderSubmission],
+    });
+
+    render(<App />);
+
+    await screen.findByText(/paper order intent audit log/i);
+    fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
+    expect(
+      await screen.findByText(/this submits to the configured ibkr paper account only/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/live trading is not supported/i).length).toBeGreaterThan(0);
+
+    const submitButton = screen.getByRole('button', { name: /submit to ibkr paper account/i });
+    expect(submitButton).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/type submit ibkr paper order to confirm/i), {
+      target: { value: ' SUBMIT IBKR PAPER ORDER ' },
+    });
+    expect(submitButton).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/type submit ibkr paper order to confirm/i), {
+      target: { value: 'SUBMIT IBKR PAPER ORDER' },
+    });
+    expect(submitButton).toBeEnabled();
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/paper-order-submissions', expect.any(Object));
+    });
+    const request = fetchMock.mock.calls.find(
+      ([url, init]) => url === '/api/broker/paper-order-submissions' && init?.method === 'POST',
+    )?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toEqual({
+      order_intent_id: 1,
+      user_confirmed: true,
+      confirmation_phrase: 'SUBMIT IBKR PAPER ORDER',
+    });
+    expect(await screen.findByText(/broker order id: 12345/i)).toBeInTheDocument();
+    expect(screen.getByText(/status: submitted_to_paper_broker/i)).toBeInTheDocument();
+  });
+
+  it('renders paper broker submission history restored from audit snapshots', async () => {
+    mockTradingApi();
+
+    render(<App />);
+
+    expect(await screen.findByText(/ibkr paper broker submission history/i)).toBeInTheDocument();
+    expect(screen.getByText(/broker order 12345/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/submitted_to_paper_broker/i).length).toBeGreaterThan(0);
+  });
+
   it('uses editable paper order ticket values when recording an intent', async () => {
     const fetchMock = mockTradingApi();
 
@@ -742,9 +926,16 @@ describe('App', () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/audit/export');
     });
-    expect(await screen.findByText(/exported audit snapshot with 1 transcript and 1 order intent/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        /exported audit snapshot with 1 transcript, 1 order intent, and 1 paper broker submission/i,
+      ),
+    ).toBeInTheDocument();
     expect((screen.getByLabelText(/audit snapshot json/i) as HTMLTextAreaElement).value).toContain(
       '"paper_order_intents"',
+    );
+    expect((screen.getByLabelText(/audit snapshot json/i) as HTMLTextAreaElement).value).toContain(
+      '"paper_broker_order_submissions"',
     );
   });
 
@@ -765,8 +956,13 @@ describe('App', () => {
     expect(JSON.parse(request.body as string)).toMatchObject({
       version: 1,
       paper_order_intents: [{ symbol: 'AAPL', submitted_to_broker: false }],
+      paper_broker_order_submissions: [{ broker_order_id: '12345' }],
     });
-    expect(await screen.findByText(/imported audit snapshot with 1 transcript and 1 order intent/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        /imported audit snapshot with 1 transcript, 1 order intent, and 1 paper broker submission/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it('refreshes the visible workspace after importing a different audit snapshot', async () => {
@@ -782,6 +978,7 @@ describe('App', () => {
 
     expect(await screen.findByText(/imported msft 5m dataset with 2 candles/i)).toBeInTheDocument();
     expect(screen.getByText(/MSFT sell 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/broker order MSFT-200/i)).toBeInTheDocument();
   });
 
   it('requires the reset confirmation phrase before clearing local audit state', async () => {
@@ -805,7 +1002,9 @@ describe('App', () => {
     expect(await screen.findByText(/local audit state reset/i)).toBeInTheDocument();
     expect(screen.getAllByText(/0 transcript/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/0 order intent/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/0 paper broker submission/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/paper order intent audit log/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ibkr paper broker submission history/i)).not.toBeInTheDocument();
   });
 });
 
@@ -862,7 +1061,14 @@ async function reachPassedBrokerReadiness() {
   await screen.findByText(/broker readiness passed/i);
 }
 
-function mockTradingApi() {
+function mockTradingApi(
+  overrides: {
+    auditSnapshot?: unknown;
+    brokerSafetySummary?: unknown;
+    paperBrokerOrderSubmission?: unknown;
+    paperBrokerOrderSubmissions?: unknown;
+  } = {},
+) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
     if (url === '/api/transcripts') {
       return new Response(JSON.stringify(savedTranscript), {
@@ -914,7 +1120,7 @@ function mockTradingApi() {
     }
 
     if (url === '/api/broker/safety-summary') {
-      return new Response(JSON.stringify(brokerSafetySummary), {
+      return new Response(JSON.stringify(overrides.brokerSafetySummary ?? brokerSafetySummary), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -969,8 +1175,28 @@ function mockTradingApi() {
       });
     }
 
+    if (url === '/api/broker/paper-order-submissions' && init?.method === 'POST') {
+      return new Response(
+        JSON.stringify(overrides.paperBrokerOrderSubmission ?? createdPaperBrokerOrderSubmission),
+        {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
+    if (url === '/api/broker/paper-order-submissions') {
+      return new Response(
+        JSON.stringify(overrides.paperBrokerOrderSubmissions ?? paperBrokerSubmissionHistory),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
     if (url === '/api/audit/export') {
-      return new Response(JSON.stringify(auditSnapshot), {
+      return new Response(JSON.stringify(overrides.auditSnapshot ?? auditSnapshot), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });

@@ -14,3 +14,7 @@ The first milestones are research, charting, backtesting, and Interactive Broker
 ## Safety stance
 
 AI-generated strategies are hypotheses, not financial advice. The app must validate, backtest, risk-check, and require explicit approval before any broker order workflow.
+
+IBKR paper-account order submission is disabled by default and remains separate from audit-only order intents. When enabled, it requires a matching configured `DU...` paper account id, a loaded read-only account snapshot, exact confirmation phrase, approved strategy, passed risk check, and live-trading-disabled capability snapshot.
+
+See `docs/ibkr-paper-order-submission.md` for the manual paper-account smoke flow and emergency disable steps.

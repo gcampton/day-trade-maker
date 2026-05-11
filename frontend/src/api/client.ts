@@ -168,7 +168,7 @@ export type BrokerConnectivityProbe = {
 
 export type BrokerCapabilities = {
   provider: 'interactive_brokers';
-  current_execution_mode: 'audit_only';
+  current_execution_mode: 'audit_only' | 'paper_broker';
   supports_order_intents: boolean;
   supports_paper_broker_submission: boolean;
   supports_live_broker_submission: boolean;
@@ -178,7 +178,7 @@ export type BrokerCapabilities = {
 
 export type BrokerOrderSubmissionCapability = {
   provider: 'interactive_brokers';
-  current_execution_mode: 'audit_only';
+  current_execution_mode: 'audit_only' | 'paper_broker';
   order_intents_supported: boolean;
   paper_broker_submission_implemented: boolean;
   paper_broker_submission_enabled: boolean;
@@ -191,7 +191,7 @@ export type BrokerOrderSubmissionCapability = {
 export type BrokerSafetySummary = {
   provider: 'interactive_brokers';
   mode: 'paper';
-  current_execution_mode: 'audit_only';
+  current_execution_mode: 'audit_only' | 'paper_broker';
   connection_status: 'not_connected' | 'connected';
   read_only: boolean;
   order_submission_enabled: boolean;
@@ -252,6 +252,30 @@ export type PaperOrderIntent = PaperOrderIntentCreatePayload & {
   created_at: string;
 };
 
+export type PaperBrokerOrderSubmissionCreatePayload = {
+  order_intent_id: number;
+  user_confirmed: boolean;
+  confirmation_phrase: string;
+};
+
+export type PaperBrokerOrderSubmission = {
+  id: number;
+  order_intent_id: number;
+  status: 'submitted_to_paper_broker';
+  submitted_to_broker: boolean;
+  broker_order_id: string | null;
+  current_execution_mode: 'paper_broker';
+  paper_broker_submission_enabled: boolean;
+  live_broker_submission_enabled: boolean;
+  order_intent_snapshot: PaperOrderIntent | null;
+  capability_snapshot: BrokerOrderSubmissionCapability | null;
+  broker_request: Record<string, string | number | boolean | null>;
+  broker_response: Record<string, string | number | boolean | null>;
+  checks: string[];
+  message: string;
+  created_at: string;
+};
+
 export type AuditSnapshot = {
   version: 1;
   exported_at: string;
@@ -261,6 +285,7 @@ export type AuditSnapshot = {
   backtests: BacktestRun[];
   risk_checks: RiskCheckRun[];
   paper_order_intents: PaperOrderIntent[];
+  paper_broker_order_submissions: PaperBrokerOrderSubmission[];
 };
 
 export type AuditImportSummary = {
@@ -271,6 +296,7 @@ export type AuditImportSummary = {
   backtest_count: number;
   risk_check_count: number;
   paper_order_intent_count: number;
+  paper_broker_order_submission_count: number;
   message: string;
 };
 
@@ -284,6 +310,7 @@ export type AuditPersistenceStatus = {
   backtest_count: number;
   risk_check_count: number;
   paper_order_intent_count: number;
+  paper_broker_order_submission_count: number;
 };
 
 export async function getTranscripts(): Promise<Transcript[]> {
@@ -489,6 +516,32 @@ export async function getPaperOrderIntents(): Promise<PaperOrderIntent[]> {
   }
 
   return response.json() as Promise<PaperOrderIntent[]>;
+}
+
+export async function createPaperBrokerOrderSubmission(
+  payload: PaperBrokerOrderSubmissionCreatePayload,
+): Promise<PaperBrokerOrderSubmission> {
+  const response = await fetch('/api/broker/paper-order-submissions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to submit order intent to IBKR paper account');
+  }
+
+  return response.json() as Promise<PaperBrokerOrderSubmission>;
+}
+
+export async function getPaperBrokerOrderSubmissions(): Promise<PaperBrokerOrderSubmission[]> {
+  const response = await fetch('/api/broker/paper-order-submissions');
+
+  if (!response.ok) {
+    throw new Error('Failed to load IBKR paper broker submission history');
+  }
+
+  return response.json() as Promise<PaperBrokerOrderSubmission[]>;
 }
 
 export async function exportAuditSnapshot(): Promise<AuditSnapshot> {

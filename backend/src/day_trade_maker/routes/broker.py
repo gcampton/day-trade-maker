@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, status
 from day_trade_maker.broker import (
     EnvBrokerSettings,
     SocketConnectivityProbe,
-    StaticAccountSnapshotReader,
+    build_account_snapshot_reader,
     build_read_only_broker_status,
 )
 from day_trade_maker.schemas import (
@@ -22,7 +22,6 @@ from day_trade_maker.stores import (
 
 router = APIRouter(prefix="/api/broker", tags=["broker"])
 connectivity_probe = SocketConnectivityProbe()
-account_snapshot_reader = StaticAccountSnapshotReader()
 
 
 @router.get("/order-intents", response_model=list[PaperOrderIntent])
@@ -52,7 +51,8 @@ def get_broker_connectivity_probe() -> BrokerConnectivityProbe:
 
 @router.get("/account", response_model=BrokerAccountSnapshot)
 def get_broker_account() -> BrokerAccountSnapshot:
-    return account_snapshot_reader.read(EnvBrokerSettings.from_environment())
+    settings = EnvBrokerSettings.from_environment()
+    return build_account_snapshot_reader(settings).read(settings)
 
 
 @router.post(

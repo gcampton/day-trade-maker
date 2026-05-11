@@ -4,8 +4,10 @@ from contextlib import contextmanager
 
 from day_trade_maker.broker import (
     EnvBrokerSettings,
+    IbkrReadOnlyAccountSnapshotReader,
     SocketConnectivityProbe,
     StaticAccountSnapshotReader,
+    build_account_snapshot_reader,
     build_read_only_broker_status,
 )
 
@@ -32,6 +34,7 @@ def test_env_broker_settings_reads_safe_defaults() -> None:
     assert settings.connectivity_probe_enabled is False
     assert settings.connectivity_probe_timeout_seconds == 1.0
     assert settings.account_snapshot_enabled is False
+    assert settings.account_snapshot_reader == "static"
 
 
 def test_env_broker_settings_reads_opt_in_probe_configuration() -> None:
@@ -43,6 +46,7 @@ def test_env_broker_settings_reads_opt_in_probe_configuration() -> None:
             "DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_ENABLED": "yes",
             "DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_TIMEOUT_SECONDS": "0.25",
             "DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_ENABLED": "true",
+            "DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_READER": "ib_async",
         }
     ):
         settings = EnvBrokerSettings.from_environment()
@@ -53,6 +57,7 @@ def test_env_broker_settings_reads_opt_in_probe_configuration() -> None:
     assert settings.connectivity_probe_enabled is True
     assert settings.connectivity_probe_timeout_seconds == 0.25
     assert settings.account_snapshot_enabled is True
+    assert settings.account_snapshot_reader == "ib_async"
 
 
 def test_socket_connectivity_probe_disabled_default_never_calls_socket_factory() -> None:
@@ -161,6 +166,146 @@ def test_static_account_snapshot_reader_enabled_returns_read_only_fixture_snapsh
     assert snapshot.message == (
         "Read-only IBKR account snapshot loaded from the configured account reader; "
         "no order operation was attempted."
+    )
+
+
+def test_ibkr_read_only_account_reader_disabled_does_not_create_client() -> None:
+    def fail_if_called():
+        raise AssertionError(
+            "IBKR client should not be created when account snapshots are disabled"
+        )
+
+    settings = EnvBrokerSettings(account_snapshot_enabled=False)
+    reader = IbkrReadOnlyAccountSnapshotReader(ib_client_factory=fail_if_called)
+
+    snapshot = reader.read(settings)
+
+    assert snapshot.account_snapshot_enabled is False
+    assert snapshot.account_data_loaded is False
+    assert snapshot.read_only is True
+    assert snapshot.order_submission_enabled is False
+    assert snapshot.balances == []
+    assert snapshot.positions == []
+
+
+def test_ibkr_read_only_account_reader_connects_reads_and_disconnects_without_orders() -> None:
+    calls = []
+
+    class AccountValue:
+        account = "DU1234567"
+        tag = "NetLiquidation"
+        value = "25000.00"
+        currency = "USD"
+
+    class Contract:
+        symbol = "AAPL"
+        secType = "STK"
+        exchange = "SMART"
+        currency = "USD"
+
+    class Position:
+        account = "DU1234567"
+        contract = Contract()
+        position = 10
+        avgCost = 190.5
+
+    class FakeIbClient:
+        def connect(self, host, port, clientId, readonly, timeout):
+            calls.append(("connect", host, port, clientId, readonly, timeout))
+
+        def managedAccounts(self):
+            calls.append(("managedAccounts",))
+            return ["DU1234567"]
+
+        def accountSummary(self):
+            calls.append(("accountSummary",))
+            return [AccountValue()]
+
+        def positions(self):
+            calls.append(("positions",))
+            return [Position()]
+
+        def disconnect(self):
+            calls.append(("disconnect",))
+
+    settings = EnvBrokerSettings(
+        host="192.0.2.10",
+        port=7497,
+        client_id=17,
+        connectivity_probe_timeout_seconds=0.25,
+        account_snapshot_enabled=True,
+    )
+    reader = IbkrReadOnlyAccountSnapshotReader(ib_client_factory=FakeIbClient)
+
+    snapshot = reader.read(settings)
+
+    assert snapshot.account_snapshot_enabled is True
+    assert snapshot.account_data_loaded is True
+    assert snapshot.read_only is True
+    assert snapshot.order_submission_enabled is False
+    assert snapshot.account_id == "DU1234567"
+    assert snapshot.balances == [
+        {"account": "DU1234567", "tag": "NetLiquidation", "value": "25000.00", "currency": "USD"}
+    ]
+    assert snapshot.positions == [
+        {
+            "account": "DU1234567",
+            "symbol": "AAPL",
+            "security_type": "STK",
+            "exchange": "SMART",
+            "currency": "USD",
+            "quantity": 10.0,
+            "average_cost": 190.5,
+        }
+    ]
+    assert snapshot.message == (
+        "Read-only IBKR account snapshot loaded via ib_async; no order operation was attempted."
+    )
+    assert calls == [
+        ("connect", "192.0.2.10", 7497, 17, True, 0.25),
+        ("managedAccounts",),
+        ("accountSummary",),
+        ("positions",),
+        ("disconnect",),
+    ]
+
+
+def test_ibkr_read_only_account_reader_disconnects_after_read_error() -> None:
+    calls = []
+
+    class FakeIbClient:
+        def connect(self, host, port, clientId, readonly, timeout):
+            calls.append(("connect", readonly))
+
+        def managedAccounts(self):
+            calls.append(("managedAccounts",))
+            raise RuntimeError("account summary failed")
+
+        def disconnect(self):
+            calls.append(("disconnect",))
+
+    settings = EnvBrokerSettings(account_snapshot_enabled=True)
+    reader = IbkrReadOnlyAccountSnapshotReader(ib_client_factory=FakeIbClient)
+
+    snapshot = reader.read(settings)
+
+    assert snapshot.account_snapshot_enabled is True
+    assert snapshot.account_data_loaded is False
+    assert snapshot.read_only is True
+    assert snapshot.order_submission_enabled is False
+    assert snapshot.balances == []
+    assert snapshot.positions == []
+    assert "could not load" in snapshot.message
+    assert calls == [("connect", True), ("managedAccounts",), ("disconnect",)]
+
+
+def test_build_account_snapshot_reader_selects_optional_ibkr_reader() -> None:
+    static_settings = EnvBrokerSettings(account_snapshot_reader="static")
+    ibkr_settings = EnvBrokerSettings(account_snapshot_reader="ib_async")
+
+    assert isinstance(build_account_snapshot_reader(static_settings), StaticAccountSnapshotReader)
+    assert isinstance(
+        build_account_snapshot_reader(ibkr_settings), IbkrReadOnlyAccountSnapshotReader
     )
 
 

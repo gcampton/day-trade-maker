@@ -87,6 +87,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [orderSymbol, setOrderSymbol] = useState('AAPL');
   const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy');
   const [orderQuantity, setOrderQuantity] = useState('10');
+  const [orderType, setOrderType] = useState<'market' | 'limit'>('market');
+  const [orderLimitPrice, setOrderLimitPrice] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isRunningBacktest, setIsRunningBacktest] = useState(false);
@@ -163,6 +165,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       setOrderSymbol(latestOrderIntent.symbol);
       setOrderSide(latestOrderIntent.side);
       setOrderQuantity(String(latestOrderIntent.quantity));
+      setOrderType(latestOrderIntent.order_type);
+      setOrderLimitPrice(latestOrderIntent.limit_price == null ? '' : String(latestOrderIntent.limit_price));
     }
   }
 
@@ -182,6 +186,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     setOrderSymbol('AAPL');
     setOrderSide('buy');
     setOrderQuantity('10');
+    setOrderType('market');
+    setOrderLimitPrice('');
   }
 
   async function handleImport(event: FormEvent<HTMLFormElement>) {
@@ -290,13 +296,15 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
 
   async function handleCreateOrderIntent() {
     const quantity = Number(orderQuantity);
+    const limitPrice = Number(orderLimitPrice);
     if (
       !selectedStrategy ||
       !riskCheck ||
       riskCheck.status !== 'passed' ||
       !orderSymbol.trim() ||
       !Number.isInteger(quantity) ||
-      quantity <= 0
+      quantity <= 0 ||
+      (orderType === 'limit' && (!Number.isFinite(limitPrice) || limitPrice <= 0))
     ) {
       return;
     }
@@ -311,7 +319,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
         symbol: orderSymbol,
         side: orderSide,
         quantity,
-        order_type: 'market',
+        order_type: orderType,
+        limit_price: orderType === 'limit' ? limitPrice : null,
         paper_mode: true,
         user_confirmed: true,
       });
@@ -455,7 +464,14 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       }))
     : sampleMarkers;
   const parsedOrderQuantity = Number(orderQuantity);
-  const isOrderTicketValid = orderSymbol.trim().length > 0 && Number.isInteger(parsedOrderQuantity) && parsedOrderQuantity > 0;
+  const parsedOrderLimitPrice = Number(orderLimitPrice);
+  const isLimitOrderTicketValid =
+    orderType === 'market' || (Number.isFinite(parsedOrderLimitPrice) && parsedOrderLimitPrice > 0);
+  const isOrderTicketValid =
+    orderSymbol.trim().length > 0 &&
+    Number.isInteger(parsedOrderQuantity) &&
+    parsedOrderQuantity > 0 &&
+    isLimitOrderTicketValid;
   const canResetAuditState = resetConfirmation === 'RESET LOCAL AUDIT STATE';
   const currentIntentPaperBrokerSubmission = orderIntent
     ? (paperBrokerSubmissionHistory.find((submission) => submission.order_intent_id === orderIntent.id) ?? paperBrokerSubmission)
@@ -956,6 +972,29 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                 required
               />
             </label>
+            <label>
+              Order type
+              <select
+                value={orderType}
+                onChange={(event) => setOrderType(event.target.value as 'market' | 'limit')}
+              >
+                <option value="market">Market</option>
+                <option value="limit">Limit</option>
+              </select>
+            </label>
+            {orderType === 'limit' ? (
+              <label>
+                Limit price
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={orderLimitPrice}
+                  onChange={(event) => setOrderLimitPrice(event.target.value)}
+                  required
+                />
+              </label>
+            ) : null}
           </div>
 
           <button

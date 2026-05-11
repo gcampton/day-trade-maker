@@ -63,7 +63,7 @@ Notes:
    - imported market data
    - backtest
    - passed risk check
-   - audit-only paper order intent
+   - audit-only paper order intent, using either market order type or a limit order with a positive limit price
 6. Enter the broker side-effect admin token and CSRF token in the UI if `DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED=true`.
 7. Type the exact phrase shown by the UI / `paper_order_submission_confirmation_phrase` (default: `SUBMIT IBKR PAPER ORDER`).
 8. Click `Submit to IBKR paper account`.
@@ -81,7 +81,7 @@ To disable the broker side effect:
 
 ## Known limits
 
-- The first submitter slice is narrow: SMART/USD stock market and limit orders only.
+- The first submitter slice is narrow: SMART/USD stock market and limit orders only. Limit orders require a positive limit price in the order intent and broker request.
 - The backend writes a durable `pending_broker_submission` record to the local audit snapshot before calling `placeOrder`; retries for the same order intent are blocked while any pending, submitted, or failed submission record exists.
 - Immediately before reserving/submitting, the backend requires a recent broker safety summary timestamp from the UI/API payload (`safety_summary_checked_at`) and rejects stale summaries before `placeOrder`.
 - If submission does not finish cleanly, the record is marked `submission_failed_requires_manual_review`; inspect IBKR/TWS and the audit snapshot before deciding any manual follow-up. Do not simply retry the same intent.

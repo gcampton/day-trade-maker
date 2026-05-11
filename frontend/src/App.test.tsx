@@ -1007,13 +1007,49 @@ describe('App', () => {
     });
   });
 
-  it('keeps the paper order intent action disabled for invalid quantity', async () => {
+  it('records a limit paper order intent with an explicit positive limit price', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    await reachPassedBrokerReadiness();
+    fireEvent.change(await screen.findByLabelText(/order symbol/i), { target: { value: 'MSFT' } });
+    fireEvent.change(screen.getByLabelText(/order side/i), { target: { value: 'sell' } });
+    fireEvent.change(screen.getByLabelText(/order quantity/i), { target: { value: '4' } });
+    fireEvent.change(screen.getByLabelText(/order type/i), { target: { value: 'limit' } });
+    fireEvent.change(screen.getByLabelText(/limit price/i), { target: { value: '411.25' } });
+
+    fireEvent.click(await screen.findByRole('button', { name: /record paper order intent/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/order-intents', expect.any(Object));
+    });
+    const request = fetchMock.mock.calls.find(([url]) => url === '/api/broker/order-intents')
+      ?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      symbol: 'MSFT',
+      side: 'sell',
+      quantity: 4,
+      order_type: 'limit',
+      limit_price: 411.25,
+      paper_mode: true,
+      user_confirmed: true,
+    });
+  });
+
+  it('keeps the paper order intent action disabled for invalid quantity or limit price', async () => {
     mockTradingApi();
 
     render(<App />);
 
     await reachPassedBrokerReadiness();
     fireEvent.change(await screen.findByLabelText(/order quantity/i), { target: { value: '0' } });
+
+    expect(screen.getByRole('button', { name: /record paper order intent/i })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/order quantity/i), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText(/order type/i), { target: { value: 'limit' } });
+    fireEvent.change(screen.getByLabelText(/limit price/i), { target: { value: '0' } });
 
     expect(screen.getByRole('button', { name: /record paper order intent/i })).toBeDisabled();
   });

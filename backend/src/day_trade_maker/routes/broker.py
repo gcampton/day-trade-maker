@@ -11,6 +11,7 @@ from day_trade_maker.schemas import (
     BrokerCapabilities,
     BrokerConnectivityProbe,
     BrokerOrderSubmissionCapability,
+    BrokerSafetySummary,
     BrokerStatus,
     PaperOrderIntent,
     PaperOrderIntentCreate,
@@ -56,6 +57,74 @@ def get_broker_order_submission_capability() -> BrokerOrderSubmissionCapability:
 @router.get("/status", response_model=BrokerStatus)
 def get_broker_status() -> BrokerStatus:
     return build_read_only_broker_status(EnvBrokerSettings.from_environment())
+
+
+@router.get("/safety-summary", response_model=BrokerSafetySummary)
+def get_broker_safety_summary() -> BrokerSafetySummary:
+    settings = EnvBrokerSettings.from_environment()
+    status_snapshot = build_read_only_broker_status(settings)
+    account_snapshot = build_account_snapshot_reader(settings).read(settings)
+    connectivity_snapshot = connectivity_probe.check(settings)
+    capabilities_snapshot = get_broker_capabilities()
+    order_submission_capability = get_broker_order_submission_capability()
+    order_submission_enabled = any(
+        [
+            status_snapshot.order_submission_enabled,
+            account_snapshot.order_submission_enabled,
+            connectivity_snapshot.order_submission_enabled,
+            capabilities_snapshot.order_submission_enabled,
+            order_submission_capability.paper_broker_submission_enabled,
+            order_submission_capability.live_broker_submission_enabled,
+            order_submission_capability.broker_order_operation_available,
+        ]
+    )
+
+    return BrokerSafetySummary(
+        connection_status=status_snapshot.connection_status,
+        read_only=(
+            status_snapshot.read_only
+            and account_snapshot.read_only
+            and connectivity_snapshot.read_only
+        ),
+        order_submission_enabled=order_submission_enabled,
+        order_intents_supported=order_submission_capability.order_intents_supported,
+        paper_broker_submission_implemented=(
+            order_submission_capability.paper_broker_submission_implemented
+        ),
+        paper_broker_submission_enabled=(
+            order_submission_capability.paper_broker_submission_enabled
+        ),
+        live_broker_submission_implemented=(
+            order_submission_capability.live_broker_submission_implemented
+        ),
+        live_broker_submission_enabled=order_submission_capability.live_broker_submission_enabled,
+        broker_order_operation_available=(
+            order_submission_capability.broker_order_operation_available
+        ),
+        account_snapshot_enabled=account_snapshot.account_snapshot_enabled,
+        account_data_loaded=account_snapshot.account_data_loaded,
+        account_reader=account_snapshot.account_reader,
+        ibkr_client_dependency_available=account_snapshot.ibkr_client_dependency_available,
+        account_id=account_snapshot.account_id,
+        balances_count=len(account_snapshot.balances),
+        positions_count=len(account_snapshot.positions),
+        connectivity_probe_status=connectivity_snapshot.probe_status,
+        connectivity_probe_enabled=connectivity_snapshot.probe_enabled,
+        connectivity_probe_attempted=connectivity_snapshot.probe_attempted,
+        configured_host=status_snapshot.configured_host,
+        configured_port=status_snapshot.configured_port,
+        configured_client_id=status_snapshot.configured_client_id,
+        connectivity_timeout_seconds=connectivity_snapshot.timeout_seconds,
+        status=status_snapshot,
+        account=account_snapshot,
+        connectivity_probe=connectivity_snapshot,
+        capabilities=capabilities_snapshot,
+        order_submission_capability=order_submission_capability,
+        message=(
+            "Broker safety summary is read-only and audit-only; no IBKR account, "
+            "connectivity, or order-submission state permits broker orders."
+        ),
+    )
 
 
 @router.get("/connectivity-probe", response_model=BrokerConnectivityProbe)

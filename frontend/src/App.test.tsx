@@ -217,6 +217,42 @@ const brokerConnectivityProbe = {
     'Read-only IBKR connectivity probe is not enabled; no socket, account, or order operation was attempted.',
 };
 
+const brokerSafetySummary = {
+  provider: 'interactive_brokers',
+  mode: 'paper',
+  current_execution_mode: 'audit_only',
+  connection_status: 'not_connected',
+  read_only: true,
+  order_submission_enabled: false,
+  order_intents_supported: true,
+  paper_broker_submission_implemented: false,
+  paper_broker_submission_enabled: false,
+  live_broker_submission_implemented: false,
+  live_broker_submission_enabled: false,
+  broker_order_operation_available: false,
+  account_snapshot_enabled: false,
+  account_data_loaded: false,
+  account_reader: 'static',
+  ibkr_client_dependency_available: false,
+  account_id: null,
+  balances_count: 0,
+  positions_count: 0,
+  connectivity_probe_status: 'unavailable',
+  connectivity_probe_enabled: false,
+  connectivity_probe_attempted: false,
+  configured_host: '127.0.0.1',
+  configured_port: 4002,
+  configured_client_id: 17,
+  connectivity_timeout_seconds: 1.0,
+  status: brokerStatus,
+  account: brokerAccount,
+  connectivity_probe: brokerConnectivityProbe,
+  capabilities: brokerCapabilities,
+  order_submission_capability: brokerOrderSubmissionCapability,
+  message:
+    'Broker safety summary is read-only and audit-only; no IBKR account, connectivity, or order-submission state permits broker orders.',
+};
+
 const createdOrderIntent = {
   id: 1,
   strategy_id: 1,
@@ -487,7 +523,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/broker/status');
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/safety-summary');
     });
     expect(await screen.findByText('Broker')).toBeInTheDocument();
     expect(screen.getAllByText(/interactive brokers/i).length).toBeGreaterThan(0);
@@ -518,7 +554,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/broker/capabilities');
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/safety-summary');
     });
     expect((await screen.findAllByText(/execution mode/i)).length).toBeGreaterThan(0);
     expect(screen.getByText(/audit-only order intents/i)).toBeInTheDocument();
@@ -535,7 +571,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/broker/order-submission-capability');
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/safety-summary');
     });
     expect(await screen.findByText(/paper order submission implementation/i)).toBeInTheDocument();
     expect(screen.getByText(/ibkr paper order submission not implemented/i)).toBeInTheDocument();
@@ -552,7 +588,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/broker/account');
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/safety-summary');
     });
     expect(screen.getAllByText(/account snapshot/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/no account or order operation was attempted/i)).toBeInTheDocument();
@@ -565,7 +601,7 @@ describe('App', () => {
     expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);
   });
 
-  it('renders the safe read-only IBKR connectivity probe diagnostics', async () => {
+  it('loads the broker safety summary through one aggregate endpoint', async () => {
     const fetchMock = mockTradingApi();
 
     render(<App />);
@@ -573,16 +609,22 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/broker/connectivity-probe');
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/safety-summary');
     });
-    expect((await screen.findAllByText(/connectivity probe/i)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/probe unavailable/i)).toBeInTheDocument();
-    expect(screen.getByText(/no socket, account, or order operation was attempted/i)).toBeInTheDocument();
-    expect(screen.getByText(/probe enabled: no/i)).toBeInTheDocument();
-    expect(screen.getByText(/probe attempted: no/i)).toBeInTheDocument();
-    expect(screen.getByText(/probe timeout: 1s/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/account data loaded: no/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/broker/status');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/broker/account');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/broker/connectivity-probe');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/broker/order-submission-capability');
+    expect((await screen.findAllByText(/broker safety summary/i)).length).toBeGreaterThan(0);
+    expect(screen.getByText(/interactive brokers paper, audit-only/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /order submission disabled across status, account, connectivity, and broker order capability/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/account data loaded: no via static reader/i)).toBeInTheDocument();
+    expect(screen.getByText(/probe unavailable; attempted: no/i)).toBeInTheDocument();
+    expect(screen.getByText(/broker order operation unavailable in safety summary/i)).toBeInTheDocument();
   });
 
   it('runs a paper-mode risk check after approval and backtest', async () => {
@@ -867,6 +909,13 @@ function mockTradingApi() {
     if (url === '/api/risk-checks') {
       return new Response(JSON.stringify(createdRiskCheck), {
         status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/broker/safety-summary') {
+      return new Response(JSON.stringify(brokerSafetySummary), {
+        status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }

@@ -4,11 +4,7 @@ import {
   createPaperOrderIntent,
   exportAuditSnapshot,
   getAuditPersistenceStatus,
-  getBrokerAccount,
-  getBrokerCapabilities,
-  getBrokerConnectivityProbe,
-  getBrokerOrderSubmissionCapability,
-  getBrokerStatus,
+  getBrokerSafetySummary,
   getMarketDataCandles,
   getPaperOrderIntents,
   importAuditSnapshot,
@@ -24,6 +20,7 @@ import {
   type BrokerCapabilities,
   type BrokerConnectivityProbe,
   type BrokerOrderSubmissionCapability,
+  type BrokerSafetySummary,
   type BrokerStatus,
   type MarketDataDatasetSummary,
   type PaperOrderIntent,
@@ -63,6 +60,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [dataset, setDataset] = useState<MarketDataDatasetSummary | null>(null);
   const [backtestRun, setBacktestRun] = useState<BacktestRun | null>(null);
   const [riskCheck, setRiskCheck] = useState<RiskCheckRun | null>(null);
+  const [brokerSafetySummary, setBrokerSafetySummary] = useState<BrokerSafetySummary | null>(null);
   const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | null>(null);
   const [brokerCapabilities, setBrokerCapabilities] = useState<BrokerCapabilities | null>(null);
   const [brokerOrderSubmissionCapability, setBrokerOrderSubmissionCapability] =
@@ -244,24 +242,13 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     setIsLoadingBrokerStatus(true);
 
     try {
-      const [
-        statusSnapshot,
-        capabilitiesSnapshot,
-        accountSnapshot,
-        connectivityProbe,
-        orderSubmissionCapability,
-      ] = await Promise.all([
-        getBrokerStatus(),
-        getBrokerCapabilities(),
-        getBrokerAccount(),
-        getBrokerConnectivityProbe(),
-        getBrokerOrderSubmissionCapability(),
-      ]);
-      setBrokerStatus(statusSnapshot);
-      setBrokerCapabilities(capabilitiesSnapshot);
-      setBrokerAccount(accountSnapshot);
-      setBrokerConnectivityProbe(connectivityProbe);
-      setBrokerOrderSubmissionCapability(orderSubmissionCapability);
+      const summary = await getBrokerSafetySummary();
+      setBrokerSafetySummary(summary);
+      setBrokerStatus(summary.status);
+      setBrokerCapabilities(summary.capabilities);
+      setBrokerAccount(summary.account);
+      setBrokerConnectivityProbe(summary.connectivity_probe);
+      setBrokerOrderSubmissionCapability(summary.order_submission_capability);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load IBKR broker status');
     } finally {
@@ -557,6 +544,49 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
           >
             {isLoadingBrokerStatus ? 'Checking IBKR status…' : 'Check IBKR status'}
           </button>
+
+          {brokerSafetySummary ? (
+            <dl className="backtest-summary" aria-label="Broker safety summary">
+              <div>
+                <dt>Broker safety summary</dt>
+                <dd>Interactive Brokers paper, audit-only</dd>
+              </div>
+              <div>
+                <dt>Primary order boundary</dt>
+                <dd>
+                  {brokerSafetySummary.order_submission_enabled
+                    ? 'Order submission enabled by at least one broker boundary'
+                    : 'Order submission disabled across status, account, connectivity, and broker order capability'}
+                </dd>
+              </div>
+              <div>
+                <dt>Account readiness</dt>
+                <dd>
+                  Account data loaded: {brokerSafetySummary.account_data_loaded ? 'yes' : 'no'} via{' '}
+                  {brokerSafetySummary.account_reader} reader
+                </dd>
+              </div>
+              <div>
+                <dt>Connectivity readiness</dt>
+                <dd>
+                  Probe {brokerSafetySummary.connectivity_probe_status}; attempted:{' '}
+                  {brokerSafetySummary.connectivity_probe_attempted ? 'yes' : 'no'}
+                </dd>
+              </div>
+              <div>
+                <dt>Broker order operations</dt>
+                <dd>
+                  {brokerSafetySummary.broker_order_operation_available
+                    ? 'Broker order operation available in safety summary'
+                    : 'Broker order operation unavailable in safety summary'}
+                </dd>
+              </div>
+              <div>
+                <dt>Safety summary note</dt>
+                <dd>{brokerSafetySummary.message}</dd>
+              </div>
+            </dl>
+          ) : null}
 
           {brokerStatus ? (
             <dl className="backtest-summary">

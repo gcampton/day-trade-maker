@@ -188,6 +188,41 @@ export type BrokerOrderSubmissionCapability = {
   message: string;
 };
 
+export type BrokerSafetySummary = {
+  provider: 'interactive_brokers';
+  mode: 'paper';
+  current_execution_mode: 'audit_only';
+  connection_status: 'not_connected' | 'connected';
+  read_only: boolean;
+  order_submission_enabled: boolean;
+  order_intents_supported: boolean;
+  paper_broker_submission_implemented: boolean;
+  paper_broker_submission_enabled: boolean;
+  live_broker_submission_implemented: boolean;
+  live_broker_submission_enabled: boolean;
+  broker_order_operation_available: boolean;
+  account_snapshot_enabled: boolean;
+  account_data_loaded: boolean;
+  account_reader: 'static' | 'ib_async';
+  ibkr_client_dependency_available: boolean;
+  account_id: string | null;
+  balances_count: number;
+  positions_count: number;
+  connectivity_probe_status: 'unavailable' | 'not_connected' | 'connected';
+  connectivity_probe_enabled: boolean;
+  connectivity_probe_attempted: boolean;
+  configured_host: string;
+  configured_port: number;
+  configured_client_id: number;
+  connectivity_timeout_seconds: number;
+  status: BrokerStatus;
+  account: BrokerAccountSnapshot;
+  connectivity_probe: BrokerConnectivityProbe;
+  capabilities: BrokerCapabilities;
+  order_submission_capability: BrokerOrderSubmissionCapability;
+  message: string;
+};
+
 export type PaperOrderIntentCreatePayload = {
   strategy_id: number;
   risk_check_id: number;
@@ -378,6 +413,16 @@ export async function getBrokerStatus(): Promise<BrokerStatus> {
   }
 
   return response.json() as Promise<BrokerStatus>;
+}
+
+export async function getBrokerSafetySummary(): Promise<BrokerSafetySummary> {
+  const response = await fetch('/api/broker/safety-summary');
+
+  if (!response.ok) {
+    throw new Error('Failed to load broker safety summary');
+  }
+
+  return response.json() as Promise<BrokerSafetySummary>;
 }
 
 export async function getBrokerAccount(): Promise<BrokerAccountSnapshot> {

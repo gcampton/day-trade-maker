@@ -205,3 +205,47 @@ def test_get_broker_order_submission_capability_is_explicitly_not_implemented_or
         "IBKR paper order submission is not implemented or enabled; "
         "this app only records audit-only paper order intents."
     )
+
+
+def test_get_broker_safety_summary_aggregates_read_only_broker_boundaries(monkeypatch) -> None:
+    def fail_if_socket_attempted(*_args, **_kwargs):
+        raise AssertionError("safety summary must not probe sockets unless explicitly enabled")
+
+    monkeypatch.delenv("DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_ENABLED", raising=False)
+    monkeypatch.delenv("DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_ENABLED", raising=False)
+    monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_CLIENT_ID", "17")
+    monkeypatch.setattr(socket, "create_connection", fail_if_socket_attempted)
+    client = TestClient(app)
+
+    response = client.get("/api/broker/safety-summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "interactive_brokers"
+    assert body["mode"] == "paper"
+    assert body["current_execution_mode"] == "audit_only"
+    assert body["connection_status"] == "not_connected"
+    assert body["read_only"] is True
+    assert body["order_submission_enabled"] is False
+    assert body["broker_order_operation_available"] is False
+    assert body["order_intents_supported"] is True
+    assert body["account_snapshot_enabled"] is False
+    assert body["account_data_loaded"] is False
+    assert body["account_reader"] == "static"
+    assert body["balances_count"] == 0
+    assert body["positions_count"] == 0
+    assert body["connectivity_probe_status"] == "unavailable"
+    assert body["connectivity_probe_enabled"] is False
+    assert body["connectivity_probe_attempted"] is False
+    assert body["configured_host"] == "127.0.0.1"
+    assert body["configured_port"] == 4002
+    assert body["configured_client_id"] == 17
+    assert body["status"]["order_submission_enabled"] is False
+    assert body["account"]["order_submission_enabled"] is False
+    assert body["connectivity_probe"]["order_submission_enabled"] is False
+    assert body["capabilities"]["supports_order_intents"] is True
+    assert body["order_submission_capability"]["broker_order_operation_available"] is False
+    assert body["message"] == (
+        "Broker safety summary is read-only and audit-only; no IBKR account, connectivity, "
+        "or order-submission state permits broker orders."
+    )

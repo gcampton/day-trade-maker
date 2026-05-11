@@ -224,6 +224,41 @@ class BrokerOrderSubmissionCapability(BaseModel):
     message: str
 
 
+class BrokerSafetySummary(BaseModel):
+    provider: Literal["interactive_brokers"] = "interactive_brokers"
+    mode: Literal["paper"] = "paper"
+    current_execution_mode: Literal["audit_only"] = "audit_only"
+    connection_status: Literal["not_connected", "connected"] = "not_connected"
+    read_only: bool = True
+    order_submission_enabled: bool = False
+    order_intents_supported: bool = True
+    paper_broker_submission_implemented: bool = False
+    paper_broker_submission_enabled: bool = False
+    live_broker_submission_implemented: bool = False
+    live_broker_submission_enabled: bool = False
+    broker_order_operation_available: bool = False
+    account_snapshot_enabled: bool = False
+    account_data_loaded: bool = False
+    account_reader: Literal["static", "ib_async"] = "static"
+    ibkr_client_dependency_available: bool = False
+    account_id: str | None = None
+    balances_count: int = 0
+    positions_count: int = 0
+    connectivity_probe_status: Literal["unavailable", "not_connected", "connected"] = "unavailable"
+    connectivity_probe_enabled: bool = False
+    connectivity_probe_attempted: bool = False
+    configured_host: str
+    configured_port: int
+    configured_client_id: int
+    connectivity_timeout_seconds: float = 1.0
+    status: BrokerStatus
+    account: BrokerAccountSnapshot
+    connectivity_probe: BrokerConnectivityProbe
+    capabilities: BrokerCapabilities
+    order_submission_capability: BrokerOrderSubmissionCapability
+    message: str
+
+
 class PaperOrderIntentCreate(BaseModel):
     strategy_id: int = Field(gt=0)
     risk_check_id: int = Field(gt=0)

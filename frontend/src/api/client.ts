@@ -205,6 +205,13 @@ export type PaperOrderIntent = PaperOrderIntentCreatePayload & {
   status: 'created_not_submitted';
   submitted_to_broker: boolean;
   order_submission_enabled: boolean;
+  current_execution_mode: 'audit_only';
+  paper_broker_submission_implemented: boolean;
+  paper_broker_submission_enabled: boolean;
+  live_broker_submission_implemented: boolean;
+  live_broker_submission_enabled: boolean;
+  broker_order_operation_available: boolean;
+  broker_submission_capability_message: string;
   checks: string[];
   message: string;
   created_at: string;

@@ -113,6 +113,17 @@ def create_paper_order_intent(payload: PaperOrderIntentCreate) -> PaperOrderInte
             detail="Passed risk check is required for order intents",
         )
 
+    order_submission_capability = get_broker_order_submission_capability()
+    if (
+        order_submission_capability.paper_broker_submission_enabled
+        or order_submission_capability.live_broker_submission_enabled
+        or order_submission_capability.broker_order_operation_available
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Audit-only order intents require broker order submission to be unavailable",
+        )
+
     return paper_order_intent_store.create(
         payload=payload,
         checks=[
@@ -120,5 +131,7 @@ def create_paper_order_intent(payload: PaperOrderIntentCreate) -> PaperOrderInte
             "passed risk check",
             "paper mode enabled",
             "explicit user confirmation",
+            "broker order submission disabled",
         ],
+        order_submission_capability=order_submission_capability,
     )

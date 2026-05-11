@@ -8,6 +8,7 @@ from day_trade_maker.persistence import SQLiteAuditSnapshotRepository
 from day_trade_maker.schemas import (
     AuditSnapshot,
     BacktestRun,
+    BrokerOrderSubmissionCapability,
     MarketDataDataset,
     PaperOrderIntent,
     PaperOrderIntentCreate,
@@ -196,10 +197,30 @@ class PaperOrderIntentStore:
         self._order_intents: list[PaperOrderIntent] = list(order_intents or [])
         self._next_id = next_id(self._order_intents)
 
-    def create(self, payload: PaperOrderIntentCreate, checks: list[str]) -> PaperOrderIntent:
+    def create(
+        self,
+        payload: PaperOrderIntentCreate,
+        checks: list[str],
+        order_submission_capability: BrokerOrderSubmissionCapability,
+    ) -> PaperOrderIntent:
         saved = PaperOrderIntent(
             id=self._next_id,
             **payload.model_dump(),
+            current_execution_mode=order_submission_capability.current_execution_mode,
+            paper_broker_submission_implemented=(
+                order_submission_capability.paper_broker_submission_implemented
+            ),
+            paper_broker_submission_enabled=(
+                order_submission_capability.paper_broker_submission_enabled
+            ),
+            live_broker_submission_implemented=(
+                order_submission_capability.live_broker_submission_implemented
+            ),
+            live_broker_submission_enabled=order_submission_capability.live_broker_submission_enabled,
+            broker_order_operation_available=(
+                order_submission_capability.broker_order_operation_available
+            ),
+            broker_submission_capability_message=order_submission_capability.message,
             checks=checks,
             message="Paper order intent recorded for audit only; no IBKR order was submitted.",
         )

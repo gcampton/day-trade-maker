@@ -257,6 +257,16 @@ class PaperOrderIntent(BaseModel):
     status: Literal["created_not_submitted"] = "created_not_submitted"
     submitted_to_broker: bool = False
     order_submission_enabled: bool = False
+    current_execution_mode: Literal["audit_only"] = "audit_only"
+    paper_broker_submission_implemented: bool = False
+    paper_broker_submission_enabled: bool = False
+    live_broker_submission_implemented: bool = False
+    live_broker_submission_enabled: bool = False
+    broker_order_operation_available: bool = False
+    broker_submission_capability_message: str = (
+        "IBKR paper order submission is not implemented or enabled; "
+        "this app only records audit-only paper order intents."
+    )
     checks: list[str]
     message: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

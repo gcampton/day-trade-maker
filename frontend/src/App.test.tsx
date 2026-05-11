@@ -231,7 +231,21 @@ const createdOrderIntent = {
   status: 'created_not_submitted',
   submitted_to_broker: false,
   order_submission_enabled: false,
-  checks: ['approved strategy', 'passed risk check', 'paper mode enabled', 'explicit user confirmation'],
+  current_execution_mode: 'audit_only',
+  paper_broker_submission_implemented: false,
+  paper_broker_submission_enabled: false,
+  live_broker_submission_implemented: false,
+  live_broker_submission_enabled: false,
+  broker_order_operation_available: false,
+  broker_submission_capability_message:
+    'IBKR paper order submission is not implemented or enabled; this app only records audit-only paper order intents.',
+  checks: [
+    'approved strategy',
+    'passed risk check',
+    'paper mode enabled',
+    'explicit user confirmation',
+    'broker order submission disabled',
+  ],
   message: 'Paper order intent recorded for audit only; no IBKR order was submitted.',
   created_at: '2026-05-10T18:24:00Z',
 };

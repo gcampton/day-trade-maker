@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 
 from day_trade_maker.api import app
+from day_trade_maker.routes import broker as broker_routes
+from day_trade_maker.schemas import BrokerOrderSubmissionCapability
 
 
 def create_approved_strategy_backtest_and_risk_check(client: TestClient) -> tuple[int, int]:
@@ -87,11 +89,61 @@ def test_create_paper_order_intent_records_audit_artifact_without_broker_submiss
     assert body["user_confirmed"] is True
     assert body["submitted_to_broker"] is False
     assert body["order_submission_enabled"] is False
+    assert body["current_execution_mode"] == "audit_only"
+    assert body["paper_broker_submission_implemented"] is False
+    assert body["paper_broker_submission_enabled"] is False
+    assert body["live_broker_submission_implemented"] is False
+    assert body["live_broker_submission_enabled"] is False
+    assert body["broker_order_operation_available"] is False
+    assert body["broker_submission_capability_message"] == (
+        "IBKR paper order submission is not implemented or enabled; "
+        "this app only records audit-only paper order intents."
+    )
     assert "approved strategy" in body["checks"]
     assert "passed risk check" in body["checks"]
     assert "explicit user confirmation" in body["checks"]
     assert body["message"] == (
         "Paper order intent recorded for audit only; no IBKR order was submitted."
+    )
+
+
+def test_order_intent_rejects_audit_creation_when_broker_order_operation_is_available(
+    monkeypatch,
+) -> None:
+    client = TestClient(app)
+    strategy_id, risk_check_id = create_approved_strategy_backtest_and_risk_check(client)
+
+    def enabled_broker_order_submission_capability() -> BrokerOrderSubmissionCapability:
+        return BrokerOrderSubmissionCapability(
+            paper_broker_submission_implemented=True,
+            paper_broker_submission_enabled=True,
+            broker_order_operation_available=True,
+            message="IBKR paper order submission is enabled in this test.",
+        )
+
+    monkeypatch.setattr(
+        broker_routes,
+        "get_broker_order_submission_capability",
+        enabled_broker_order_submission_capability,
+    )
+
+    response = client.post(
+        "/api/broker/order-intents",
+        json={
+            "strategy_id": strategy_id,
+            "risk_check_id": risk_check_id,
+            "symbol": "AAPL",
+            "side": "buy",
+            "quantity": 10,
+            "order_type": "market",
+            "paper_mode": True,
+            "user_confirmed": True,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Audit-only order intents require broker order submission to be unavailable"
     )
 
 

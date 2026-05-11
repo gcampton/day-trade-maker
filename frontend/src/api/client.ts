@@ -147,6 +147,19 @@ export type BrokerAccountSnapshot = {
   message: string;
 };
 
+export type BrokerConnectivityProbe = {
+  provider: 'interactive_brokers';
+  probe_status: 'unavailable' | 'not_connected' | 'connected';
+  connection_status: 'not_connected' | 'connected';
+  read_only: boolean;
+  order_submission_enabled: boolean;
+  probe_attempted: boolean;
+  account_data_loaded: boolean;
+  host: string;
+  port: number;
+  message: string;
+};
+
 export type BrokerCapabilities = {
   provider: 'interactive_brokers';
   current_execution_mode: 'audit_only';
@@ -350,6 +363,16 @@ export async function getBrokerAccount(): Promise<BrokerAccountSnapshot> {
   }
 
   return response.json() as Promise<BrokerAccountSnapshot>;
+}
+
+export async function getBrokerConnectivityProbe(): Promise<BrokerConnectivityProbe> {
+  const response = await fetch('/api/broker/connectivity-probe');
+
+  if (!response.ok) {
+    throw new Error('Failed to load IBKR connectivity probe');
+  }
+
+  return response.json() as Promise<BrokerConnectivityProbe>;
 }
 
 export async function getBrokerCapabilities(): Promise<BrokerCapabilities> {

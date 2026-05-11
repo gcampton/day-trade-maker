@@ -183,6 +183,20 @@ const brokerAccount = {
   message: 'IBKR account snapshot is read-only and empty until a broker session is connected.',
 };
 
+const brokerConnectivityProbe = {
+  provider: 'interactive_brokers',
+  probe_status: 'unavailable',
+  connection_status: 'not_connected',
+  read_only: true,
+  order_submission_enabled: false,
+  probe_attempted: false,
+  account_data_loaded: false,
+  host: '127.0.0.1',
+  port: 4002,
+  message:
+    'Read-only IBKR connectivity probe is not enabled; no socket, account, or order operation was attempted.',
+};
+
 const createdOrderIntent = {
   id: 1,
   strategy_id: 1,
@@ -456,7 +470,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
 
     expect(await screen.findByText(/configured ibkr gateway/i)).toBeInTheDocument();
-    expect(screen.getByText('127.0.0.1:4002')).toBeInTheDocument();
+    expect(screen.getAllByText('127.0.0.1:4002').length).toBeGreaterThan(0);
     expect(screen.getByText('17')).toBeInTheDocument();
     expect(screen.getByText(/connection probing is read-only and not yet active/i)).toBeInTheDocument();
     expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);
@@ -493,6 +507,24 @@ describe('App', () => {
     expect(screen.getByText(/read-only empty until connected/i)).toBeInTheDocument();
     expect(screen.getByText(/0 balances/i)).toBeInTheDocument();
     expect(screen.getByText(/0 positions/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);
+  });
+
+  it('renders the safe read-only IBKR connectivity probe diagnostics', async () => {
+    const fetchMock = mockTradingApi();
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/connectivity-probe');
+    });
+    expect(screen.getAllByText(/connectivity probe/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/probe unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText(/no socket, account, or order operation was attempted/i)).toBeInTheDocument();
+    expect(screen.getByText(/probe attempted: no/i)).toBeInTheDocument();
+    expect(screen.getByText(/account data loaded: no/i)).toBeInTheDocument();
     expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);
   });
 
@@ -793,6 +825,13 @@ function mockTradingApi() {
 
     if (url === '/api/broker/account') {
       return new Response(JSON.stringify(brokerAccount), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url === '/api/broker/connectivity-probe') {
+      return new Response(JSON.stringify(brokerConnectivityProbe), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });

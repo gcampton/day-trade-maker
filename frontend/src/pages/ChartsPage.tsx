@@ -6,6 +6,7 @@ import {
   getAuditPersistenceStatus,
   getBrokerAccount,
   getBrokerCapabilities,
+  getBrokerConnectivityProbe,
   getBrokerStatus,
   getMarketDataCandles,
   getPaperOrderIntents,
@@ -20,6 +21,7 @@ import {
   type BacktestRun,
   type BrokerAccountSnapshot,
   type BrokerCapabilities,
+  type BrokerConnectivityProbe,
   type BrokerStatus,
   type MarketDataDatasetSummary,
   type PaperOrderIntent,
@@ -62,6 +64,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | null>(null);
   const [brokerCapabilities, setBrokerCapabilities] = useState<BrokerCapabilities | null>(null);
   const [brokerAccount, setBrokerAccount] = useState<BrokerAccountSnapshot | null>(null);
+  const [brokerConnectivityProbe, setBrokerConnectivityProbe] = useState<BrokerConnectivityProbe | null>(null);
   const [orderIntent, setOrderIntent] = useState<PaperOrderIntent | null>(null);
   const [orderIntentHistory, setOrderIntentHistory] = useState<PaperOrderIntent[]>([]);
   const [auditSnapshotJson, setAuditSnapshotJson] = useState('');
@@ -237,14 +240,16 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     setIsLoadingBrokerStatus(true);
 
     try {
-      const [statusSnapshot, capabilitiesSnapshot, accountSnapshot] = await Promise.all([
+      const [statusSnapshot, capabilitiesSnapshot, accountSnapshot, connectivityProbe] = await Promise.all([
         getBrokerStatus(),
         getBrokerCapabilities(),
         getBrokerAccount(),
+        getBrokerConnectivityProbe(),
       ]);
       setBrokerStatus(statusSnapshot);
       setBrokerCapabilities(capabilitiesSnapshot);
       setBrokerAccount(accountSnapshot);
+      setBrokerConnectivityProbe(connectivityProbe);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load IBKR broker status');
     } finally {
@@ -601,6 +606,41 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                     ? 'Order submission enabled'
                     : 'Order submission disabled'}
                 </dd>
+              </div>
+            </dl>
+          ) : null}
+
+          {brokerConnectivityProbe ? (
+            <dl className="backtest-summary" aria-label="IBKR connectivity probe">
+              <div>
+                <dt>Connectivity probe</dt>
+                <dd>Probe {brokerConnectivityProbe.probe_status}</dd>
+              </div>
+              <div>
+                <dt>Probe target</dt>
+                <dd>
+                  {brokerConnectivityProbe.host}:{brokerConnectivityProbe.port}
+                </dd>
+              </div>
+              <div>
+                <dt>Probe attempted</dt>
+                <dd>Probe attempted: {brokerConnectivityProbe.probe_attempted ? 'yes' : 'no'}</dd>
+              </div>
+              <div>
+                <dt>Account data</dt>
+                <dd>Account data loaded: {brokerConnectivityProbe.account_data_loaded ? 'yes' : 'no'}</dd>
+              </div>
+              <div>
+                <dt>Probe orders</dt>
+                <dd>
+                  {brokerConnectivityProbe.order_submission_enabled
+                    ? 'Order submission enabled'
+                    : 'Order submission disabled'}
+                </dd>
+              </div>
+              <div>
+                <dt>Probe note</dt>
+                <dd>{brokerConnectivityProbe.message}</dd>
               </div>
             </dl>
           ) : null}

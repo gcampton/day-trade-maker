@@ -183,6 +183,19 @@ class BrokerAccountSnapshot(BaseModel):
     message: str
 
 
+class BrokerConnectivityProbe(BaseModel):
+    provider: Literal["interactive_brokers"] = "interactive_brokers"
+    probe_status: Literal["unavailable", "not_connected", "connected"] = "unavailable"
+    connection_status: Literal["not_connected", "connected"] = "not_connected"
+    read_only: bool = True
+    order_submission_enabled: bool = False
+    probe_attempted: bool = False
+    account_data_loaded: bool = False
+    host: str
+    port: int
+    message: str
+
+
 class BrokerCapabilities(BaseModel):
     provider: Literal["interactive_brokers"] = "interactive_brokers"
     current_execution_mode: Literal["audit_only"] = "audit_only"

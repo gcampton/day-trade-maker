@@ -62,6 +62,28 @@ def test_get_broker_account_returns_read_only_empty_account_snapshot() -> None:
     assert body["order_submission_enabled"] is False
 
 
+def test_get_broker_connectivity_probe_is_read_only_and_disabled_by_default() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/broker/connectivity-probe")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "interactive_brokers"
+    assert body["probe_status"] == "unavailable"
+    assert body["connection_status"] == "not_connected"
+    assert body["read_only"] is True
+    assert body["order_submission_enabled"] is False
+    assert body["probe_attempted"] is False
+    assert body["account_data_loaded"] is False
+    assert body["host"] == "127.0.0.1"
+    assert body["port"] == 4002
+    assert body["message"] == (
+        "Read-only IBKR connectivity probe is not enabled; no socket, account, "
+        "or order operation was attempted."
+    )
+
+
 def test_get_broker_capabilities_separates_audit_intents_from_future_execution() -> None:
     client = TestClient(app)
 

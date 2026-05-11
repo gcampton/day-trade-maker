@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 from day_trade_maker.schemas import (
     BrokerAccountSnapshot,
     BrokerCapabilities,
+    BrokerConnectivityProbe,
     BrokerStatus,
     PaperOrderIntent,
     PaperOrderIntentCreate,
@@ -16,6 +17,25 @@ from day_trade_maker.stores import (
 )
 
 router = APIRouter(prefix="/api/broker", tags=["broker"])
+
+
+def ibkr_host() -> str:
+    return os.environ.get("DAY_TRADE_MAKER_IBKR_HOST", "127.0.0.1")
+
+
+def ibkr_port() -> int:
+    return int(os.environ.get("DAY_TRADE_MAKER_IBKR_PORT", "4002"))
+
+
+def build_read_only_connectivity_probe() -> BrokerConnectivityProbe:
+    return BrokerConnectivityProbe(
+        host=ibkr_host(),
+        port=ibkr_port(),
+        message=(
+            "Read-only IBKR connectivity probe is not enabled; no socket, account, "
+            "or order operation was attempted."
+        ),
+    )
 
 
 @router.get("/order-intents", response_model=list[PaperOrderIntent])
@@ -35,8 +55,8 @@ def get_broker_capabilities() -> BrokerCapabilities:
 
 @router.get("/status", response_model=BrokerStatus)
 def get_broker_status() -> BrokerStatus:
-    host = os.environ.get("DAY_TRADE_MAKER_IBKR_HOST", "127.0.0.1")
-    port = int(os.environ.get("DAY_TRADE_MAKER_IBKR_PORT", "4002"))
+    host = ibkr_host()
+    port = ibkr_port()
     client_id = int(os.environ.get("DAY_TRADE_MAKER_IBKR_CLIENT_ID", "1"))
 
     return BrokerStatus(
@@ -49,6 +69,11 @@ def get_broker_status() -> BrokerStatus:
         ),
         message="IBKR read-only scaffold is configured; no broker session is connected.",
     )
+
+
+@router.get("/connectivity-probe", response_model=BrokerConnectivityProbe)
+def get_broker_connectivity_probe() -> BrokerConnectivityProbe:
+    return build_read_only_connectivity_probe()
 
 
 @router.get("/account", response_model=BrokerAccountSnapshot)

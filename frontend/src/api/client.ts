@@ -191,6 +191,8 @@ export type BrokerOrderSubmissionCapability = {
 export type BrokerSafetySummary = {
   provider: 'interactive_brokers';
   mode: 'paper';
+  checked_at: string;
+  max_age_seconds: number;
   current_execution_mode: 'audit_only' | 'paper_broker';
   connection_status: 'not_connected' | 'connected';
   read_only: boolean;
@@ -256,6 +258,7 @@ export type PaperBrokerOrderSubmissionCreatePayload = {
   order_intent_id: number;
   user_confirmed: boolean;
   confirmation_phrase: string;
+  safety_summary_checked_at?: string | null;
 };
 
 export type BrokerSideEffectAuth = {

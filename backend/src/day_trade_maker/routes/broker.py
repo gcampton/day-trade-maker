@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
 from threading import Lock
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -145,12 +148,13 @@ def create_paper_broker_order_submission(
         )
 
     with _submission_lock(order_intent.id):
-        return _create_paper_broker_order_submission_with_lock(settings, order_intent)
+        return _create_paper_broker_order_submission_with_lock(settings, order_intent, payload)
 
 
 def _create_paper_broker_order_submission_with_lock(
     settings: EnvBrokerSettings,
     order_intent: PaperOrderIntent,
+    payload: PaperBrokerOrderSubmissionCreate,
 ) -> PaperBrokerOrderSubmission:
     _validate_source_order_intent_for_paper_broker_submission(order_intent)
     if paper_broker_order_submission_store.get_by_order_intent_id(order_intent.id) is not None:
@@ -177,6 +181,8 @@ def _create_paper_broker_order_submission_with_lock(
             detail="IBKR paper order submission is not enabled",
         )
 
+    _validate_fresh_safety_summary_for_paper_broker_submission(payload, settings)
+
     request = _build_validated_broker_paper_order_request(order_intent)
     broker_request_snapshot = {
         "symbol": request.symbol,
@@ -190,6 +196,7 @@ def _create_paper_broker_order_submission_with_lock(
         "passed risk check",
         "source order intent confirmed audit-only",
         "paper broker submission enabled",
+        "fresh broker safety summary checked before placeOrder",
         "live broker submission disabled",
         "durable idempotency reservation created before broker placeOrder",
     ]
@@ -242,6 +249,36 @@ def _mark_submission_failed_requires_manual_review(
             "manual broker/account review is required before retry."
         ),
     )
+
+
+def _validate_fresh_safety_summary_for_paper_broker_submission(
+    payload: PaperBrokerOrderSubmissionCreate,
+    settings: EnvBrokerSettings,
+) -> None:
+    if payload.safety_summary_checked_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Fresh broker safety summary is required before paper broker submission",
+        )
+
+    checked_at = payload.safety_summary_checked_at
+    if checked_at.tzinfo is None:
+        checked_at = checked_at.replace(tzinfo=UTC)
+    checked_at = checked_at.astimezone(UTC)
+    age_seconds = (datetime.now(UTC) - checked_at).total_seconds()
+    if age_seconds < -5:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Broker safety summary timestamp is in the future",
+        )
+    if age_seconds > settings.paper_order_submission_max_safety_summary_age_seconds:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Broker safety summary is stale; "
+                "refresh broker safety summary before submission"
+            ),
+        )
 
 
 def _submission_lock(order_intent_id: int) -> Lock:
@@ -413,6 +450,8 @@ def get_broker_safety_summary() -> BrokerSafetySummary:
     )
 
     return BrokerSafetySummary(
+        checked_at=datetime.now(UTC),
+        max_age_seconds=settings.paper_order_submission_max_safety_summary_age_seconds,
         current_execution_mode=order_submission_capability.current_execution_mode,
         connection_status=status_snapshot.connection_status,
         read_only=read_only,

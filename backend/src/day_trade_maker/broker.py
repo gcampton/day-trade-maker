@@ -32,6 +32,7 @@ class EnvBrokerSettings:
     account_snapshot_reader: str = "static"
     paper_order_submission_enabled: bool = False
     paper_order_submission_confirmation_phrase: str = "SUBMIT IBKR PAPER ORDER"
+    paper_order_submission_max_safety_summary_age_seconds: float = 60.0
     paper_account_id: str | None = None
 
     @classmethod
@@ -58,6 +59,12 @@ class EnvBrokerSettings:
             paper_order_submission_confirmation_phrase=os.environ.get(
                 "DAY_TRADE_MAKER_IBKR_PAPER_ORDER_CONFIRMATION_PHRASE",
                 "SUBMIT IBKR PAPER ORDER",
+            ),
+            paper_order_submission_max_safety_summary_age_seconds=float(
+                os.environ.get(
+                    "DAY_TRADE_MAKER_IBKR_PAPER_ORDER_MAX_SAFETY_SUMMARY_AGE_SECONDS",
+                    "60.0",
+                )
             ),
             paper_account_id=_optional_env("DAY_TRADE_MAKER_IBKR_PAPER_ACCOUNT_ID"),
         )

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from threading import Event, Thread
 
 from fastapi import HTTPException
@@ -155,6 +156,14 @@ def enable_side_effect_auth(monkeypatch) -> dict[str, str]:
     }
 
 
+def recent_safety_summary_checked_at() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def stale_safety_summary_checked_at() -> str:
+    return (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
+
+
 def test_submit_paper_broker_order_rejects_default_disabled_capability() -> None:
     client = TestClient(app)
     order_intent = create_audit_only_order_intent(client)
@@ -165,6 +174,7 @@ def test_submit_paper_broker_order_rejects_default_disabled_capability() -> None
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
 
@@ -182,6 +192,7 @@ def test_submit_paper_broker_order_requires_confirmation() -> None:
             "order_intent_id": order_intent["id"],
             "user_confirmed": False,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
 
@@ -263,6 +274,7 @@ def test_submit_paper_broker_order_requires_admin_auth_and_csrf_when_enabled(
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
     assert missing_auth.status_code == 401
@@ -276,6 +288,7 @@ def test_submit_paper_broker_order_requires_admin_auth_and_csrf_when_enabled(
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
     assert bad_csrf.status_code == 403
@@ -289,6 +302,7 @@ def test_submit_paper_broker_order_requires_admin_auth_and_csrf_when_enabled(
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
     assert authorized.status_code == 201
@@ -317,6 +331,7 @@ def test_submit_paper_broker_order_fails_closed_when_auth_is_required_but_not_co
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
 
@@ -324,6 +339,80 @@ def test_submit_paper_broker_order_fails_closed_when_auth_is_required_but_not_co
     assert response.json()["detail"] == (
         "Broker side-effect authorization is required but not configured"
     )
+
+
+def test_submit_paper_broker_order_requires_fresh_safety_summary_before_place_order(
+    monkeypatch,
+) -> None:
+    client = TestClient(app)
+    order_intent = create_audit_only_order_intent(client)
+    submitted_requests = []
+
+    def enabled_capability(*_args, **_kwargs) -> BrokerOrderSubmissionCapability:
+        return BrokerOrderSubmissionCapability(
+            current_execution_mode="paper_broker",
+            paper_broker_submission_implemented=True,
+            paper_broker_submission_enabled=True,
+            broker_order_operation_available=True,
+            message=(
+                "IBKR paper order submission is enabled for the configured paper account; "
+                "live trading remains disabled."
+            ),
+        )
+
+    class FakeSubmitter:
+        def submit(self, settings, request):
+            submitted_requests.append(request)
+            return BrokerPaperOrderResult(
+                broker_order_id="12345",
+                status="Submitted",
+                raw_response={"broker_order_id": "12345", "status": "Submitted"},
+            )
+
+    monkeypatch.setattr(broker_routes, "build_order_submission_capability", enabled_capability)
+    monkeypatch.setattr(broker_routes, "paper_order_submitter", FakeSubmitter())
+
+    missing_summary = client.post(
+        "/api/broker/paper-order-submissions",
+        json={
+            "order_intent_id": order_intent["id"],
+            "user_confirmed": True,
+            "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+        },
+    )
+    assert missing_summary.status_code == 409
+    assert missing_summary.json()["detail"] == (
+        "Fresh broker safety summary is required before paper broker submission"
+    )
+    assert submitted_requests == []
+
+    stale_summary = client.post(
+        "/api/broker/paper-order-submissions",
+        json={
+            "order_intent_id": order_intent["id"],
+            "user_confirmed": True,
+            "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": stale_safety_summary_checked_at(),
+        },
+    )
+    assert stale_summary.status_code == 409
+    assert stale_summary.json()["detail"] == (
+        "Broker safety summary is stale; refresh broker safety summary before submission"
+    )
+    assert submitted_requests == []
+
+    recent_summary = client.post(
+        "/api/broker/paper-order-submissions",
+        json={
+            "order_intent_id": order_intent["id"],
+            "user_confirmed": True,
+            "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
+        },
+    )
+    assert recent_summary.status_code == 201
+    assert recent_summary.json()["broker_order_id"] == "12345"
+    assert len(submitted_requests) == 1
 
 
 def test_submit_paper_broker_order_rejects_unknown_order_intent() -> None:
@@ -336,6 +425,7 @@ def test_submit_paper_broker_order_rejects_unknown_order_intent() -> None:
             "order_intent_id": 999999,
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
 
@@ -365,6 +455,7 @@ def test_submit_paper_broker_order_rejects_if_live_submission_is_enabled(monkeyp
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
 
@@ -407,6 +498,7 @@ def test_submit_paper_broker_order_rejects_limit_order_without_limit_price(
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
 
@@ -447,6 +539,7 @@ def test_submit_paper_broker_order_rejects_market_order_with_limit_price(monkeyp
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
 
@@ -489,6 +582,7 @@ def test_submit_paper_broker_order_success_creates_separate_audit_artifact(monke
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
 
@@ -527,6 +621,7 @@ def test_submit_paper_broker_order_success_creates_separate_audit_artifact(monke
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
     assert duplicate.status_code == 409
@@ -588,6 +683,7 @@ def test_refresh_paper_broker_order_status_updates_existing_submission(monkeypat
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
     assert submission_response.status_code == 201
@@ -667,6 +763,7 @@ def test_refresh_paper_broker_order_status_requires_admin_auth_and_csrf_when_ena
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
     assert submission_response.status_code == 201
@@ -746,6 +843,7 @@ def test_refresh_paper_broker_order_status_requires_submitted_broker_order(monke
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
     assert failed_submission_response.status_code == 409
@@ -814,6 +912,7 @@ def test_paper_broker_submission_reserves_durable_pending_record_before_submitte
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
 
@@ -861,6 +960,7 @@ def test_paper_broker_submission_failure_records_manual_review_and_blocks_retry(
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
 
@@ -891,6 +991,7 @@ def test_paper_broker_submission_failure_records_manual_review_and_blocks_retry(
             "order_intent_id": order_intent["id"],
             "user_confirmed": True,
             "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+            "safety_summary_checked_at": recent_safety_summary_checked_at(),
         },
     )
 
@@ -943,6 +1044,7 @@ def test_concurrent_paper_broker_submissions_for_same_intent_call_submitter_once
                     order_intent_id=order_intent["id"],
                     user_confirmed=True,
                     confirmation_phrase="SUBMIT IBKR PAPER ORDER",
+                    safety_summary_checked_at=datetime.now(UTC),
                 )
             )
             responses.append((201, result))
@@ -1003,6 +1105,7 @@ def test_list_paper_broker_submissions_returns_history_in_creation_order(monkeyp
                 "order_intent_id": order_intent["id"],
                 "user_confirmed": True,
                 "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+                "safety_summary_checked_at": recent_safety_summary_checked_at(),
             },
         )
         assert response.status_code == 201

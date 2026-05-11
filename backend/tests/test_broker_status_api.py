@@ -225,6 +225,8 @@ def test_get_broker_safety_summary_aggregates_read_only_broker_boundaries(monkey
     body = response.json()
     assert body["provider"] == "interactive_brokers"
     assert body["mode"] == "paper"
+    assert body["checked_at"] is not None
+    assert body["max_age_seconds"] == 60.0
     assert body["current_execution_mode"] == "audit_only"
     assert body["connection_status"] == "not_connected"
     assert body["read_only"] is True
@@ -270,6 +272,7 @@ def test_get_broker_safety_summary_message_reflects_enabled_paper_submission(mon
 
     monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_PAPER_ORDER_SUBMISSION_ENABLED", "true")
     monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_PAPER_ACCOUNT_ID", "DU1234567")
+    monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_PAPER_ORDER_MAX_SAFETY_SUMMARY_AGE_SECONDS", "45")
     monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_ENABLED", "true")
     monkeypatch.setenv("DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_READER", "ib_async")
     monkeypatch.setattr(
@@ -284,6 +287,7 @@ def test_get_broker_safety_summary_message_reflects_enabled_paper_submission(mon
     assert response.status_code == 200
     body = response.json()
     assert body["current_execution_mode"] == "paper_broker"
+    assert body["max_age_seconds"] == 45.0
     assert body["order_submission_enabled"] is True
     assert body["paper_broker_submission_enabled"] is True
     assert body["broker_order_operation_available"] is True

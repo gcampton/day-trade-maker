@@ -28,6 +28,7 @@ DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_READER=ib_async
 DAY_TRADE_MAKER_IBKR_PAPER_ACCOUNT_ID=DU1234567
 DAY_TRADE_MAKER_IBKR_PAPER_ORDER_SUBMISSION_ENABLED=true
 DAY_TRADE_MAKER_IBKR_PAPER_ORDER_CONFIRMATION_PHRASE="SUBMIT IBKR PAPER ORDER"
+DAY_TRADE_MAKER_IBKR_PAPER_ORDER_MAX_SAFETY_SUMMARY_AGE_SECONDS=60
 
 # Required before exposing side-effecting broker endpoints beyond trusted local dev.
 DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED=true
@@ -41,6 +42,7 @@ Notes:
 - Missing account IDs, live-looking `U...` IDs, and mismatched IDs keep broker order operations unavailable.
 - The backend sets the verified paper account id on the IBKR order before `placeOrder`.
 - If `DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED=true`, the submission and status-refresh endpoints fail closed unless both server-side tokens are configured and the request includes matching `Authorization: Bearer ...` and `X-CSRF-Token` headers.
+- `GET /api/broker/safety-summary` returns `checked_at` and `max_age_seconds`; paper submission must include that recent `checked_at` value and refreshes are required before `DAY_TRADE_MAKER_IBKR_PAPER_ORDER_MAX_SAFETY_SUMMARY_AGE_SECONDS` elapses.
 - The frontend exposes in-memory token fields in the IBKR paper submission panel. Leave them blank only for trusted local development where the backend auth gate remains disabled.
 
 ## Manual smoke flow
@@ -54,6 +56,7 @@ Notes:
    - `broker_order_operation_available=true`
    - `live_broker_submission_enabled=false`
    - `account_id` matches `DAY_TRADE_MAKER_IBKR_PAPER_ACCOUNT_ID`
+   - `checked_at` is current and within `max_age_seconds`
 5. In the UI, create or restore the research chain:
    - transcript
    - approved strategy
@@ -80,6 +83,7 @@ To disable the broker side effect:
 
 - The first submitter slice is narrow: SMART/USD stock market and limit orders only.
 - The backend writes a durable `pending_broker_submission` record to the local audit snapshot before calling `placeOrder`; retries for the same order intent are blocked while any pending, submitted, or failed submission record exists.
+- Immediately before reserving/submitting, the backend requires a recent broker safety summary timestamp from the UI/API payload (`safety_summary_checked_at`) and rejects stale summaries before `placeOrder`.
 - If submission does not finish cleanly, the record is marked `submission_failed_requires_manual_review`; inspect IBKR/TWS and the audit snapshot before deciding any manual follow-up. Do not simply retry the same intent.
 - Status refresh is explicit/operator-triggered. It does not place or cancel orders; it connects read-only to IBKR, asks for currently open trades, updates the existing submission record, and may report `unknown` if IBKR no longer returns that order in open trades.
 - Side-effecting broker endpoints support an optional admin bearer-token plus CSRF-token gate. Keep the backend bound to trusted local development if `DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED=false`; set it to `true` before exposing beyond trusted local dev.

@@ -335,6 +335,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
           order_intent_id: orderIntent.id,
           user_confirmed: true,
           confirmation_phrase: paperSubmissionConfirmationPhrase,
+          safety_summary_checked_at: brokerSafetySummary?.checked_at ?? null,
         },
         {
           adminToken: brokerSideEffectAdminToken || undefined,
@@ -682,6 +683,13 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                   {brokerSafetySummary.broker_order_operation_available
                     ? 'Broker order operation available in safety summary'
                     : 'Broker order operation unavailable in safety summary'}
+                </dd>
+              </div>
+              <div>
+                <dt>Safety summary freshness</dt>
+                <dd>
+                  Checked at {brokerSafetySummary.checked_at}; required max age{' '}
+                  {brokerSafetySummary.max_age_seconds} seconds before broker placeOrder
                 </dd>
               </div>
               <div>

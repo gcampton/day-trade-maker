@@ -220,6 +220,8 @@ const brokerConnectivityProbe = {
 const brokerSafetySummary = {
   provider: 'interactive_brokers',
   mode: 'paper',
+  checked_at: '2026-05-10T18:25:00Z',
+  max_age_seconds: 60,
   current_execution_mode: 'audit_only',
   connection_status: 'not_connected',
   read_only: true,
@@ -898,6 +900,7 @@ describe('App', () => {
       order_intent_id: 1,
       user_confirmed: true,
       confirmation_phrase: 'SUBMIT IBKR PAPER ORDER',
+      safety_summary_checked_at: enabledBrokerSafetySummary.checked_at,
     });
     expect(await screen.findByText(/broker order id: 12345/i)).toBeInTheDocument();
     expect(screen.getByText(/status: submitted_to_paper_broker/i)).toBeInTheDocument();

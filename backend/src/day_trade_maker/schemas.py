@@ -227,6 +227,8 @@ class BrokerOrderSubmissionCapability(BaseModel):
 class BrokerSafetySummary(BaseModel):
     provider: Literal["interactive_brokers"] = "interactive_brokers"
     mode: Literal["paper"] = "paper"
+    checked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    max_age_seconds: float = 60.0
     current_execution_mode: Literal["audit_only", "paper_broker"] = "audit_only"
     connection_status: Literal["not_connected", "connected"] = "not_connected"
     read_only: bool = True
@@ -311,6 +313,7 @@ class PaperBrokerOrderSubmissionCreate(BaseModel):
     order_intent_id: int = Field(gt=0)
     user_confirmed: bool
     confirmation_phrase: NonEmptyString
+    safety_summary_checked_at: datetime | None = None
 
     @field_validator("confirmation_phrase")
     @classmethod

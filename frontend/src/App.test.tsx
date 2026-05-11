@@ -357,6 +357,9 @@ const createdPaperBrokerOrderSubmission = {
     limit_price: null,
   },
   broker_response: { broker_order_id: '12345', status: 'Submitted' },
+  latest_broker_order_status: 'Submitted',
+  broker_status_checked_at: null,
+  broker_status_response: {},
   checks: [
     'approved strategy',
     'passed risk check',
@@ -366,6 +369,27 @@ const createdPaperBrokerOrderSubmission = {
   ],
   message: 'IBKR paper order submitted; live trading remains disabled.',
   created_at: '2026-05-10T18:26:00Z',
+};
+
+const refreshedPaperBrokerOrderSubmission = {
+  ...createdPaperBrokerOrderSubmission,
+  latest_broker_order_status: 'Filled',
+  broker_status_checked_at: '2026-05-10T18:27:00Z',
+  broker_status_response: { broker_order_id: '12345', status: 'Filled', remaining: 0 },
+  message: 'IBKR paper order status refreshed; live trading remains disabled.',
+};
+
+const failedPaperBrokerOrderSubmission = {
+  ...createdPaperBrokerOrderSubmission,
+  status: 'submission_failed_requires_manual_review',
+  submitted_to_broker: false,
+  broker_order_id: null,
+  broker_response: {
+    error: 'paper gateway timed out after placeOrder',
+    error_type: 'RuntimeError',
+  },
+  message:
+    'IBKR paper order submission did not finish cleanly; manual broker/account review is required before retry.',
 };
 
 const paperBrokerSubmissionHistory = [createdPaperBrokerOrderSubmission];
@@ -705,15 +729,15 @@ describe('App', () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/broker/safety-summary');
     });
-    expect(screen.getAllByText(/account snapshot/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/no account or order operation was attempted/i)).toBeInTheDocument();
-    expect(screen.getByText(/account snapshot enabled: no/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/account data loaded: no/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/account reader: static/i)).toBeInTheDocument();
-    expect(screen.getByText(/ibkr dependency available: no/i)).toBeInTheDocument();
-    expect(screen.getByText(/0 balances/i)).toBeInTheDocument();
-    expect(screen.getByText(/0 positions/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/account snapshot/i)).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/no account or order operation was attempted/i)).toBeInTheDocument();
+    expect(await screen.findByText(/account snapshot enabled: no/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/account data loaded: no/i)).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/account reader: static/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ibkr dependency available: no/i)).toBeInTheDocument();
+    expect(await screen.findByText(/0 balances/i)).toBeInTheDocument();
+    expect(await screen.findByText(/0 positions/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/order submission disabled/i)).length).toBeGreaterThan(0);
   });
 
   it('loads the broker safety summary through one aggregate endpoint', async () => {
@@ -843,6 +867,12 @@ describe('App', () => {
 
     const submitButton = screen.getByRole('button', { name: /submit to ibkr paper account/i });
     expect(submitButton).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/broker side-effect admin token/i), {
+      target: { value: 'admin-secret' },
+    });
+    fireEvent.change(screen.getByLabelText(/broker side-effect csrf token/i), {
+      target: { value: 'csrf-secret' },
+    });
     fireEvent.change(screen.getByLabelText(/type submit ibkr paper order to confirm/i), {
       target: { value: ' SUBMIT IBKR PAPER ORDER ' },
     });
@@ -859,6 +889,11 @@ describe('App', () => {
     const request = fetchMock.mock.calls.find(
       ([url, init]) => url === '/api/broker/paper-order-submissions' && init?.method === 'POST',
     )?.[1] as RequestInit;
+    expect(request.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer admin-secret',
+      'X-CSRF-Token': 'csrf-secret',
+    });
     expect(JSON.parse(request.body as string)).toEqual({
       order_intent_id: 1,
       user_confirmed: true,
@@ -876,6 +911,59 @@ describe('App', () => {
     expect(await screen.findByText(/ibkr paper broker submission history/i)).toBeInTheDocument();
     expect(screen.getByText(/broker order 12345/i)).toBeInTheDocument();
     expect(screen.getAllByText(/submitted_to_paper_broker/i).length).toBeGreaterThan(0);
+  });
+
+  it('refreshes submitted IBKR paper order status on operator action', async () => {
+    const fetchMock = mockTradingApi({
+      paperBrokerOrderStatusRefresh: refreshedPaperBrokerOrderSubmission,
+      paperBrokerOrderSubmissions: [refreshedPaperBrokerOrderSubmission],
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText(/ibkr paper broker order submitted/i)).toBeInTheDocument();
+    expect(screen.getByText(/latest broker order status: submitted/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/broker side-effect admin token/i), {
+      target: { value: 'admin-secret' },
+    });
+    fireEvent.change(screen.getByLabelText(/broker side-effect csrf token/i), {
+      target: { value: 'csrf-secret' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /refresh ibkr paper order status/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/paper-order-submissions/1/status-refresh', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-secret',
+          'X-CSRF-Token': 'csrf-secret',
+        },
+      });
+    });
+    expect(await screen.findByText(/latest broker order status: filled/i)).toBeInTheDocument();
+    expect(screen.getByText(/status checked: 2026-05-10T18:27:00Z/i)).toBeInTheDocument();
+    expect(screen.getByText(/broker order 12345 — submitted_to_paper_broker; latest broker status Filled/i)).toBeInTheDocument();
+  });
+
+  it('renders failed paper broker submissions as manual-review records', async () => {
+    mockTradingApi({
+      auditSnapshot: {
+        ...auditSnapshot,
+        paper_broker_order_submissions: [failedPaperBrokerOrderSubmission],
+      },
+      paperBrokerOrderSubmissions: [failedPaperBrokerOrderSubmission],
+    });
+
+    render(<App />);
+
+    expect(
+      await screen.findByText(/ibkr paper broker submission requires manual review/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/status: submission_failed_requires_manual_review/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/manual broker\/account review is required before retry/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/ibkr paper broker order submitted/i)).not.toBeInTheDocument();
   });
 
   it('uses editable paper order ticket values when recording an intent', async () => {
@@ -1066,6 +1154,7 @@ function mockTradingApi(
     auditSnapshot?: unknown;
     brokerSafetySummary?: unknown;
     paperBrokerOrderSubmission?: unknown;
+    paperBrokerOrderStatusRefresh?: unknown;
     paperBrokerOrderSubmissions?: unknown;
   } = {},
 ) {
@@ -1180,6 +1269,16 @@ function mockTradingApi(
         JSON.stringify(overrides.paperBrokerOrderSubmission ?? createdPaperBrokerOrderSubmission),
         {
           status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
+    if (url === '/api/broker/paper-order-submissions/1/status-refresh' && init?.method === 'POST') {
+      return new Response(
+        JSON.stringify(overrides.paperBrokerOrderStatusRefresh ?? refreshedPaperBrokerOrderSubmission),
+        {
+          status: 200,
           headers: { 'Content-Type': 'application/json' },
         },
       );

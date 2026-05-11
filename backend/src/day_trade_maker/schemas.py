@@ -325,7 +325,11 @@ class PaperBrokerOrderSubmission(BaseModel):
 
     id: int
     order_intent_id: int
-    status: Literal["submitted_to_paper_broker"] = "submitted_to_paper_broker"
+    status: Literal[
+        "pending_broker_submission",
+        "submitted_to_paper_broker",
+        "submission_failed_requires_manual_review",
+    ] = "submitted_to_paper_broker"
     submitted_to_broker: bool = True
     broker_order_id: str | None = None
     current_execution_mode: Literal["paper_broker"] = "paper_broker"
@@ -335,6 +339,9 @@ class PaperBrokerOrderSubmission(BaseModel):
     capability_snapshot: BrokerOrderSubmissionCapability | None = None
     broker_request: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
     broker_response: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    latest_broker_order_status: str | None = None
+    broker_status_checked_at: datetime | None = None
+    broker_status_response: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
     checks: list[str]
     message: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

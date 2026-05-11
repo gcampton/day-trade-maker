@@ -25,12 +25,27 @@ class BrokerPaperOrderResult:
     raw_response: dict[str, BrokerResponseValue]
 
 
+@dataclass(frozen=True)
+class BrokerPaperOrderStatusResult:
+    broker_order_id: str
+    status: str
+    raw_response: dict[str, BrokerResponseValue]
+
+
 class PaperOrderSubmitter(Protocol):
     def submit(
         self,
         settings: EnvBrokerSettings,
         request: BrokerPaperOrderRequest,
     ) -> BrokerPaperOrderResult: ...
+
+
+class PaperOrderStatusPoller(Protocol):
+    def poll(
+        self,
+        settings: EnvBrokerSettings,
+        broker_order_id: str,
+    ) -> BrokerPaperOrderStatusResult: ...
 
 
 class PaperOrderSubmissionUnavailable(RuntimeError):
@@ -45,6 +60,18 @@ class UnavailablePaperOrderSubmitter:
     ) -> BrokerPaperOrderResult:
         raise PaperOrderSubmissionUnavailable(
             "IBKR paper order submission is not available; no broker order operation was attempted."
+        )
+
+
+class UnavailablePaperOrderStatusPoller:
+    def poll(
+        self,
+        settings: EnvBrokerSettings,
+        broker_order_id: str,
+    ) -> BrokerPaperOrderStatusResult:
+        raise PaperOrderSubmissionUnavailable(
+            "IBKR paper order status polling is not available; "
+            "no broker order operation was attempted."
         )
 
 
@@ -156,6 +183,90 @@ class IbAsyncPaperOrderSubmitter:
             return LimitOrder(action, request.quantity, request.limit_price)
 
         raise ValueError(f"unsupported paper order type: {request.order_type}")
+
+
+class IbAsyncPaperOrderStatusPoller:
+    def __init__(self, ib_client_factory: Callable[[], Any] | None = None) -> None:
+        self.ib_client_factory = ib_client_factory
+
+    def poll(
+        self,
+        settings: EnvBrokerSettings,
+        broker_order_id: str,
+    ) -> BrokerPaperOrderStatusResult:
+        normalized_order_id = broker_order_id.strip()
+        if not normalized_order_id:
+            raise ValueError("broker_order_id is required for paper order status polling")
+        if not settings.paper_order_submission_enabled:
+            raise PaperOrderSubmissionUnavailable(
+                "IBKR paper order status polling is disabled; "
+                "no broker order operation was attempted."
+            )
+        if not _is_configured_paper_account(settings.paper_account_id):
+            raise PaperOrderSubmissionUnavailable(
+                "IBKR paper order status polling requires a configured IBKR paper account; "
+                "no broker order operation was attempted."
+            )
+
+        ib_client = self._build_client()
+        connected = False
+        try:
+            ib_client.connect(
+                settings.host,
+                settings.port,
+                clientId=settings.client_id,
+                readonly=True,
+                timeout=settings.connectivity_probe_timeout_seconds,
+            )
+            connected = True
+            for trade in self._open_trades(ib_client):
+                if _extract_broker_order_id(trade) == normalized_order_id:
+                    status = _extract_order_status(trade)
+                    return BrokerPaperOrderStatusResult(
+                        broker_order_id=normalized_order_id,
+                        status=status,
+                        raw_response={
+                            "broker_order_id": normalized_order_id,
+                            "status": status,
+                            "source": "open_trades",
+                        },
+                    )
+            return BrokerPaperOrderStatusResult(
+                broker_order_id=normalized_order_id,
+                status="unknown",
+                raw_response={
+                    "broker_order_id": normalized_order_id,
+                    "status": "unknown",
+                    "message": "IBKR paper order was not found in current open trades.",
+                },
+            )
+        finally:
+            if connected:
+                ib_client.disconnect()
+
+    def _build_client(self) -> Any:
+        if self.ib_client_factory is not None:
+            return self.ib_client_factory()
+        try:
+            from ib_async import IB
+        except ImportError as exc:
+            raise PaperOrderSubmissionUnavailable(
+                "IBKR paper order status polling requires optional ib_async; "
+                "no broker order operation was attempted."
+            ) from exc
+        return IB()
+
+    @staticmethod
+    def _open_trades(ib_client: Any) -> list[Any]:
+        if hasattr(ib_client, "reqOpenOrders"):
+            requested_trades = ib_client.reqOpenOrders()
+            if requested_trades:
+                return list(requested_trades)
+        if hasattr(ib_client, "openTrades"):
+            return list(ib_client.openTrades())
+        if hasattr(ib_client, "trades"):
+            return list(ib_client.trades())
+        return []
 
 
 def _validate_broker_paper_order_request(request: BrokerPaperOrderRequest) -> None:

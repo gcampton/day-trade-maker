@@ -267,11 +267,14 @@ class PaperBrokerOrderSubmissionStore:
         saved = PaperBrokerOrderSubmission(
             id=self._next_id,
             order_intent_id=order_intent_id,
+            status="submitted_to_paper_broker",
+            submitted_to_broker=True,
             broker_order_id=broker_order_id,
             order_intent_snapshot=order_intent_snapshot,
             capability_snapshot=capability_snapshot,
             broker_request=broker_request or {},
             broker_response=broker_response,
+            latest_broker_order_status=_broker_order_status_from_response(broker_response),
             checks=checks,
             message=message,
         )
@@ -280,12 +283,111 @@ class PaperBrokerOrderSubmissionStore:
         persist_all()
         return saved
 
+    def reserve_pending(
+        self,
+        order_intent_id: int,
+        checks: list[str],
+        message: str,
+        order_intent_snapshot: PaperOrderIntent,
+        capability_snapshot: BrokerOrderSubmissionCapability,
+        broker_request: dict[str, str | int | float | bool | None],
+    ) -> PaperBrokerOrderSubmission:
+        saved = PaperBrokerOrderSubmission(
+            id=self._next_id,
+            order_intent_id=order_intent_id,
+            status="pending_broker_submission",
+            submitted_to_broker=False,
+            broker_order_id=None,
+            order_intent_snapshot=order_intent_snapshot,
+            capability_snapshot=capability_snapshot,
+            broker_request=broker_request,
+            broker_response={},
+            checks=checks,
+            message=message,
+        )
+        self._next_id += 1
+        self._submissions.append(saved)
+        persist_all()
+        return saved
+
+    def mark_submitted(
+        self,
+        submission_id: int,
+        broker_order_id: str | None,
+        broker_response: dict[str, str | int | float | bool | None],
+        message: str,
+    ) -> PaperBrokerOrderSubmission:
+        return self._update(
+            submission_id,
+            status="submitted_to_paper_broker",
+            submitted_to_broker=True,
+            broker_order_id=broker_order_id,
+            broker_response=broker_response,
+            latest_broker_order_status=_broker_order_status_from_response(broker_response),
+            message=message,
+        )
+
+    def mark_status_refreshed(
+        self,
+        submission_id: int,
+        broker_order_status: str,
+        broker_status_response: dict[str, str | int | float | bool | None],
+        message: str,
+    ) -> PaperBrokerOrderSubmission:
+        return self._update(
+            submission_id,
+            latest_broker_order_status=broker_order_status,
+            broker_status_response=broker_status_response,
+            broker_status_checked_at=datetime.now(UTC),
+            message=message,
+        )
+
+    def mark_failed_requires_manual_review(
+        self,
+        submission_id: int,
+        broker_response: dict[str, str | int | float | bool | None],
+        message: str,
+    ) -> PaperBrokerOrderSubmission:
+        return self._update(
+            submission_id,
+            status="submission_failed_requires_manual_review",
+            submitted_to_broker=False,
+            broker_response=broker_response,
+            message=message,
+        )
+
+    def _update(
+        self,
+        submission_id: int,
+        **updates: object,
+    ) -> PaperBrokerOrderSubmission:
+        existing = self.get(submission_id)
+        if existing is None:
+            raise ValueError(f"Paper broker submission {submission_id} not found")
+        updated = existing.model_copy(update=updates)
+        self._submissions = [
+            updated if submission.id == submission_id else submission
+            for submission in self._submissions
+        ]
+        persist_all()
+        return updated
+
     def list(self) -> list[PaperBrokerOrderSubmission]:
         return list(self._submissions)
 
     def get(self, submission_id: int) -> PaperBrokerOrderSubmission | None:
         return next(
             (submission for submission in self._submissions if submission.id == submission_id),
+            None,
+        )
+
+    def get_by_order_intent_id(self, order_intent_id: int) -> PaperBrokerOrderSubmission | None:
+        return next(
+            (
+                submission
+                for submission in self._submissions
+                if submission.order_intent_id == order_intent_id
+            ),
             None,
         )
 
@@ -297,6 +399,15 @@ class PaperBrokerOrderSubmissionStore:
 
 def next_id(items: list[object]) -> int:
     return max((item.id for item in items), default=0) + 1
+
+
+def _broker_order_status_from_response(
+    response: dict[str, str | int | float | bool | None],
+) -> str | None:
+    status = response.get("status")
+    if status is None:
+        return None
+    return str(status)
 
 
 audit_snapshot_repository = SQLiteAuditSnapshotRepository()

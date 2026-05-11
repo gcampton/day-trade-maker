@@ -601,9 +601,10 @@ npm run build
 
 ### Open Questions
 
+- Resolved during continuation: side-effecting paper submission/status-refresh endpoints now support optional admin bearer-token plus CSRF-token auth and fail closed when required but not configured.
 - Should the first real submitter support limit orders only, avoiding market orders even in paper mode?
 - Should broker order submissions require a fresh broker safety summary less than N seconds old?
-- Should the app persist IBKR trade/order status updates after initial placement, or is initial submission id/status enough for this slice?
+- Resolved during continuation: the app persists explicit/operator-triggered IBKR paper order status refreshes on the existing `PaperBrokerOrderSubmission` record (`latest_broker_order_status`, `broker_status_checked_at`, `broker_status_response`).
 - Should the confirmation phrase be hardcoded for safety or configurable via env as planned?
 - Should paper submission be hidden completely unless the backend reports capability enabled, or visible as a disabled educational panel?
 

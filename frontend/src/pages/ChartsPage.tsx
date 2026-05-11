@@ -11,6 +11,7 @@ import {
   getPaperOrderIntents,
   importAuditSnapshot,
   importMarketDataCsv,
+  refreshPaperBrokerOrderSubmissionStatus,
   resetAuditState,
   runBacktest,
   runRiskCheck,
@@ -77,6 +78,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [paperBrokerSubmission, setPaperBrokerSubmission] = useState<PaperBrokerOrderSubmission | null>(null);
   const [paperBrokerSubmissionHistory, setPaperBrokerSubmissionHistory] = useState<PaperBrokerOrderSubmission[]>([]);
   const [paperSubmissionConfirmationPhrase, setPaperSubmissionConfirmationPhrase] = useState('');
+  const [brokerSideEffectAdminToken, setBrokerSideEffectAdminToken] = useState('');
+  const [brokerSideEffectCsrfToken, setBrokerSideEffectCsrfToken] = useState('');
   const [auditSnapshotJson, setAuditSnapshotJson] = useState('');
   const [auditMessage, setAuditMessage] = useState<string | null>(null);
   const [auditPersistenceStatus, setAuditPersistenceStatus] = useState<AuditPersistenceStatus | null>(null);
@@ -91,6 +94,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const [isLoadingBrokerStatus, setIsLoadingBrokerStatus] = useState(false);
   const [isCreatingOrderIntent, setIsCreatingOrderIntent] = useState(false);
   const [isSubmittingPaperBrokerOrder, setIsSubmittingPaperBrokerOrder] = useState(false);
+  const [isRefreshingPaperBrokerOrderStatus, setIsRefreshingPaperBrokerOrderStatus] = useState(false);
   const [isExportingAudit, setIsExportingAudit] = useState(false);
   const [isImportingAudit, setIsImportingAudit] = useState(false);
   const [isResettingAudit, setIsResettingAudit] = useState(false);
@@ -326,11 +330,17 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
     setIsSubmittingPaperBrokerOrder(true);
 
     try {
-      const created = await createPaperBrokerOrderSubmission({
-        order_intent_id: orderIntent.id,
-        user_confirmed: true,
-        confirmation_phrase: paperSubmissionConfirmationPhrase,
-      });
+      const created = await createPaperBrokerOrderSubmission(
+        {
+          order_intent_id: orderIntent.id,
+          user_confirmed: true,
+          confirmation_phrase: paperSubmissionConfirmationPhrase,
+        },
+        {
+          adminToken: brokerSideEffectAdminToken || undefined,
+          csrfToken: brokerSideEffectCsrfToken || undefined,
+        },
+      );
       setPaperBrokerSubmission(created);
       setPaperBrokerSubmissionHistory(await getPaperBrokerOrderSubmissions());
       setPaperSubmissionConfirmationPhrase('');
@@ -338,6 +348,33 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       setError(err instanceof Error ? err.message : 'Failed to submit to IBKR paper account');
     } finally {
       setIsSubmittingPaperBrokerOrder(false);
+    }
+  }
+
+  async function handleRefreshPaperBrokerOrderStatus(submission: PaperBrokerOrderSubmission) {
+    if (!submission.submitted_to_broker || !submission.broker_order_id) {
+      return;
+    }
+
+    setError(null);
+    setIsRefreshingPaperBrokerOrderStatus(true);
+
+    try {
+      const refreshed = await refreshPaperBrokerOrderSubmissionStatus(submission.id, {
+        adminToken: brokerSideEffectAdminToken || undefined,
+        csrfToken: brokerSideEffectCsrfToken || undefined,
+      });
+      setPaperBrokerSubmission(refreshed);
+      setPaperBrokerSubmissionHistory((current) => {
+        if (current.some((item) => item.id === refreshed.id)) {
+          return current.map((item) => (item.id === refreshed.id ? refreshed : item));
+        }
+        return [...current, refreshed];
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh IBKR paper order status');
+    } finally {
+      setIsRefreshingPaperBrokerOrderStatus(false);
     }
   }
 
@@ -974,6 +1011,34 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                 <p>This order intent is an audit artifact only; no broker order was submitted.</p>
               </div>
 
+              <div className="form-heading">
+                <h4>Protected deployment authorization</h4>
+                <p>
+                  Leave blank for trusted local development. If backend side-effect auth is enabled,
+                  provide both tokens before submitting or refreshing an IBKR paper order.
+                </p>
+              </div>
+              <div className="form-row">
+                <label>
+                  Broker side-effect admin token
+                  <input
+                    type="password"
+                    value={brokerSideEffectAdminToken}
+                    onChange={(event) => setBrokerSideEffectAdminToken(event.target.value)}
+                    autoComplete="off"
+                  />
+                </label>
+                <label>
+                  Broker side-effect CSRF token
+                  <input
+                    type="password"
+                    value={brokerSideEffectCsrfToken}
+                    onChange={(event) => setBrokerSideEffectCsrfToken(event.target.value)}
+                    autoComplete="off"
+                  />
+                </label>
+              </div>
+
               {isPaperBrokerSubmissionEnabled && !currentIntentPaperBrokerSubmission ? (
                 <>
                   <p className="error">
@@ -1004,11 +1069,31 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
               <p className="muted">Live trading is not supported.</p>
 
               {currentIntentPaperBrokerSubmission ? (
-                <div className="success">
-                  <p>IBKR paper broker order submitted</p>
+                <div className={paperBrokerSubmissionClassName(currentIntentPaperBrokerSubmission)}>
+                  <p>{formatPaperBrokerSubmissionHeading(currentIntentPaperBrokerSubmission)}</p>
                   <p>Broker order id: {currentIntentPaperBrokerSubmission.broker_order_id ?? 'pending'}</p>
                   <p>Status: {currentIntentPaperBrokerSubmission.status}</p>
+                  <p>
+                    Latest broker order status:{' '}
+                    {formatLatestBrokerOrderStatus(currentIntentPaperBrokerSubmission)}
+                  </p>
+                  <p>
+                    Status checked:{' '}
+                    {currentIntentPaperBrokerSubmission.broker_status_checked_at ?? 'not checked yet'}
+                  </p>
                   <p>{currentIntentPaperBrokerSubmission.message}</p>
+                  {currentIntentPaperBrokerSubmission.submitted_to_broker &&
+                  currentIntentPaperBrokerSubmission.broker_order_id ? (
+                    <button
+                      type="button"
+                      disabled={isRefreshingPaperBrokerOrderStatus}
+                      onClick={() => handleRefreshPaperBrokerOrderStatus(currentIntentPaperBrokerSubmission)}
+                    >
+                      {isRefreshingPaperBrokerOrderStatus
+                        ? 'Refreshing IBKR paper order status…'
+                        : 'Refresh IBKR paper order status'}
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </section>
@@ -1020,8 +1105,9 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
               <ul>
                 {paperBrokerSubmissionHistory.map((submission) => (
                   <li key={submission.id}>
-                    Broker order {submission.broker_order_id ?? 'pending'} — {submission.status}; live
-                    trading disabled; source intent #{submission.order_intent_id}
+                    Broker order {submission.broker_order_id ?? 'pending'} — {submission.status}; latest
+                    broker status {formatLatestBrokerOrderStatus(submission)}; live trading disabled;
+                    source intent #{submission.order_intent_id}
                   </li>
                 ))}
               </ul>
@@ -1053,6 +1139,35 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
       </section>
     </section>
   );
+}
+
+function paperBrokerSubmissionClassName(submission: PaperBrokerOrderSubmission): string {
+  if (submission.status === 'submission_failed_requires_manual_review') {
+    return 'error';
+  }
+  if (submission.status === 'pending_broker_submission') {
+    return 'muted';
+  }
+  return 'success';
+}
+
+function formatPaperBrokerSubmissionHeading(submission: PaperBrokerOrderSubmission): string {
+  switch (submission.status) {
+    case 'pending_broker_submission':
+      return 'IBKR paper broker submission pending';
+    case 'submission_failed_requires_manual_review':
+      return 'IBKR paper broker submission requires manual review';
+    case 'submitted_to_paper_broker':
+      return 'IBKR paper broker order submitted';
+  }
+}
+
+function formatLatestBrokerOrderStatus(submission: PaperBrokerOrderSubmission): string {
+  if (submission.latest_broker_order_status) {
+    return submission.latest_broker_order_status;
+  }
+  const brokerResponseStatus = submission.broker_response.status;
+  return brokerResponseStatus == null ? 'unknown' : String(brokerResponseStatus);
 }
 
 function formatUsd(value: number): string {

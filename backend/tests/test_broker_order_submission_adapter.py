@@ -3,8 +3,11 @@ import pytest
 from day_trade_maker.broker import EnvBrokerSettings
 from day_trade_maker.broker_orders import (
     BrokerPaperOrderRequest,
+    BrokerPaperOrderStatusResult,
+    IbAsyncPaperOrderStatusPoller,
     IbAsyncPaperOrderSubmitter,
     PaperOrderSubmissionUnavailable,
+    UnavailablePaperOrderStatusPoller,
     UnavailablePaperOrderSubmitter,
 )
 
@@ -261,3 +264,99 @@ def test_ib_async_submitter_disconnects_after_place_order_error() -> None:
         )
 
     assert calls[-1] == ("disconnect",)
+
+
+def test_unavailable_status_poller_raises_before_any_broker_operation() -> None:
+    poller = UnavailablePaperOrderStatusPoller()
+
+    with pytest.raises(PaperOrderSubmissionUnavailable, match="not available"):
+        poller.poll(EnvBrokerSettings(), "12345")
+
+
+def test_ib_async_status_poller_refuses_when_submission_disabled_before_client_creation() -> None:
+    def fail_if_client_created():
+        raise AssertionError("IBKR client must not be created while status polling is disabled")
+
+    poller = IbAsyncPaperOrderStatusPoller(ib_client_factory=fail_if_client_created)
+
+    with pytest.raises(PaperOrderSubmissionUnavailable, match="disabled"):
+        poller.poll(EnvBrokerSettings(paper_order_submission_enabled=False), "12345")
+
+
+def test_ib_async_status_poller_connects_readonly_and_returns_matching_trade_status() -> None:
+    calls = []
+
+    class FakeTrade:
+        class order:
+            orderId = 12345
+
+        class orderStatus:
+            status = "Filled"
+
+    class FakeIbClient:
+        def connect(self, host, port, clientId, readonly, timeout):
+            calls.append(("connect", host, port, clientId, readonly, timeout))
+
+        def openTrades(self):
+            calls.append(("openTrades",))
+            return [FakeTrade()]
+
+        def disconnect(self):
+            calls.append(("disconnect",))
+
+    poller = IbAsyncPaperOrderStatusPoller(ib_client_factory=FakeIbClient)
+
+    result = poller.poll(
+        EnvBrokerSettings(
+            host="192.0.2.10",
+            port=7497,
+            client_id=17,
+            connectivity_probe_timeout_seconds=0.25,
+            paper_order_submission_enabled=True,
+            paper_account_id="DU1234567",
+        ),
+        "12345",
+    )
+
+    assert isinstance(result, BrokerPaperOrderStatusResult)
+    assert result.broker_order_id == "12345"
+    assert result.status == "Filled"
+    assert result.raw_response == {
+        "broker_order_id": "12345",
+        "status": "Filled",
+        "source": "open_trades",
+    }
+    assert calls == [
+        ("connect", "192.0.2.10", 7497, 17, True, 0.25),
+        ("openTrades",),
+        ("disconnect",),
+    ]
+
+
+def test_ib_async_status_poller_reports_unknown_when_order_is_not_returned() -> None:
+    class FakeIbClient:
+        def connect(self, *args, **kwargs):
+            pass
+
+        def openTrades(self):
+            return []
+
+        def disconnect(self):
+            pass
+
+    poller = IbAsyncPaperOrderStatusPoller(ib_client_factory=FakeIbClient)
+
+    result = poller.poll(
+        EnvBrokerSettings(
+            paper_order_submission_enabled=True,
+            paper_account_id="DU1234567",
+        ),
+        "12345",
+    )
+
+    assert result.status == "unknown"
+    assert result.raw_response == {
+        "broker_order_id": "12345",
+        "status": "unknown",
+        "message": "IBKR paper order was not found in current open trades.",
+    }

@@ -258,10 +258,18 @@ export type PaperBrokerOrderSubmissionCreatePayload = {
   confirmation_phrase: string;
 };
 
+export type BrokerSideEffectAuth = {
+  adminToken?: string;
+  csrfToken?: string;
+};
+
 export type PaperBrokerOrderSubmission = {
   id: number;
   order_intent_id: number;
-  status: 'submitted_to_paper_broker';
+  status:
+    | 'pending_broker_submission'
+    | 'submitted_to_paper_broker'
+    | 'submission_failed_requires_manual_review';
   submitted_to_broker: boolean;
   broker_order_id: string | null;
   current_execution_mode: 'paper_broker';
@@ -271,6 +279,9 @@ export type PaperBrokerOrderSubmission = {
   capability_snapshot: BrokerOrderSubmissionCapability | null;
   broker_request: Record<string, string | number | boolean | null>;
   broker_response: Record<string, string | number | boolean | null>;
+  latest_broker_order_status: string | null;
+  broker_status_checked_at: string | null;
+  broker_status_response: Record<string, string | number | boolean | null>;
   checks: string[];
   message: string;
   created_at: string;
@@ -520,10 +531,11 @@ export async function getPaperOrderIntents(): Promise<PaperOrderIntent[]> {
 
 export async function createPaperBrokerOrderSubmission(
   payload: PaperBrokerOrderSubmissionCreatePayload,
+  auth?: BrokerSideEffectAuth,
 ): Promise<PaperBrokerOrderSubmission> {
   const response = await fetch('/api/broker/paper-order-submissions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...brokerSideEffectAuthHeaders(auth) },
     body: JSON.stringify(payload),
   });
 
@@ -542,6 +554,33 @@ export async function getPaperBrokerOrderSubmissions(): Promise<PaperBrokerOrder
   }
 
   return response.json() as Promise<PaperBrokerOrderSubmission[]>;
+}
+
+export async function refreshPaperBrokerOrderSubmissionStatus(
+  submissionId: number,
+  auth?: BrokerSideEffectAuth,
+): Promise<PaperBrokerOrderSubmission> {
+  const response = await fetch(`/api/broker/paper-order-submissions/${submissionId}/status-refresh`, {
+    method: 'POST',
+    headers: brokerSideEffectAuthHeaders(auth),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to refresh IBKR paper order status');
+  }
+
+  return response.json() as Promise<PaperBrokerOrderSubmission>;
+}
+
+function brokerSideEffectAuthHeaders(auth?: BrokerSideEffectAuth): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (auth?.adminToken) {
+    headers.Authorization = `Bearer ${auth.adminToken}`;
+  }
+  if (auth?.csrfToken) {
+    headers['X-CSRF-Token'] = auth.csrfToken;
+  }
+  return headers;
 }
 
 export async function exportAuditSnapshot(): Promise<AuditSnapshot> {

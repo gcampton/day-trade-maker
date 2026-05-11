@@ -28,6 +28,11 @@ DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_READER=ib_async
 DAY_TRADE_MAKER_IBKR_PAPER_ACCOUNT_ID=DU1234567
 DAY_TRADE_MAKER_IBKR_PAPER_ORDER_SUBMISSION_ENABLED=true
 DAY_TRADE_MAKER_IBKR_PAPER_ORDER_CONFIRMATION_PHRASE="SUBMIT IBKR PAPER ORDER"
+
+# Required before exposing side-effecting broker endpoints beyond trusted local dev.
+DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED=true
+DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_ADMIN_TOKEN="replace-with-random-admin-token"
+DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_CSRF_TOKEN="replace-with-random-csrf-token"
 ```
 
 Notes:
@@ -35,6 +40,8 @@ Notes:
 - `DAY_TRADE_MAKER_IBKR_PAPER_ACCOUNT_ID` must match the loaded account snapshot exactly and should use IBKR's paper-account `DU...` shape.
 - Missing account IDs, live-looking `U...` IDs, and mismatched IDs keep broker order operations unavailable.
 - The backend sets the verified paper account id on the IBKR order before `placeOrder`.
+- If `DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED=true`, the submission and status-refresh endpoints fail closed unless both server-side tokens are configured and the request includes matching `Authorization: Bearer ...` and `X-CSRF-Token` headers.
+- The frontend exposes in-memory token fields in the IBKR paper submission panel. Leave them blank only for trusted local development where the backend auth gate remains disabled.
 
 ## Manual smoke flow
 
@@ -54,9 +61,11 @@ Notes:
    - backtest
    - passed risk check
    - audit-only paper order intent
-6. Type the exact phrase: `SUBMIT IBKR PAPER ORDER`.
-7. Click `Submit to IBKR paper account`.
-8. Verify the returned broker order id/status in the UI and in the exported audit snapshot.
+6. Enter the broker side-effect admin token and CSRF token in the UI if `DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED=true`.
+7. Type the exact phrase: `SUBMIT IBKR PAPER ORDER`.
+8. Click `Submit to IBKR paper account`.
+9. Verify the returned broker order id/status in the UI and in the exported audit snapshot.
+10. To refresh status later, click `Refresh IBKR paper order status`; this uses the same paper-account safety gates and persists `latest_broker_order_status`, `broker_status_checked_at`, and the raw status response on the existing submission artifact.
 
 ## Emergency disable
 
@@ -70,6 +79,7 @@ To disable the broker side effect:
 ## Known limits
 
 - The first submitter slice is narrow: SMART/USD stock market and limit orders only.
-- Duplicate protection is in-process and per order intent. It prevents concurrent duplicate submissions in a running backend process, but does not yet persist a pending idempotency record before `placeOrder`.
-- No authentication/authorization layer exists around the side-effecting endpoint yet. Keep the backend bound to trusted local development only until an auth design is chosen.
-- The app records initial broker order id/status only. It does not yet poll or persist later IBKR order-status updates.
+- The backend writes a durable `pending_broker_submission` record to the local audit snapshot before calling `placeOrder`; retries for the same order intent are blocked while any pending, submitted, or failed submission record exists.
+- If submission does not finish cleanly, the record is marked `submission_failed_requires_manual_review`; inspect IBKR/TWS and the audit snapshot before deciding any manual follow-up. Do not simply retry the same intent.
+- Status refresh is explicit/operator-triggered. It does not place or cancel orders; it connects read-only to IBKR, asks for currently open trades, updates the existing submission record, and may report `unknown` if IBKR no longer returns that order in open trades.
+- Side-effecting broker endpoints support an optional admin bearer-token plus CSRF-token gate. Keep the backend bound to trusted local development if `DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED=false`; set it to `true` before exposing beyond trusted local dev.

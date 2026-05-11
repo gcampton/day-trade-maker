@@ -4,8 +4,9 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from day_trade_maker import stores
 from day_trade_maker.api import app
-from day_trade_maker.broker_orders import BrokerPaperOrderResult
+from day_trade_maker.broker_orders import BrokerPaperOrderResult, BrokerPaperOrderStatusResult
 from day_trade_maker.routes import broker as broker_routes
 from day_trade_maker.schemas import (
     AuditSnapshot,
@@ -144,6 +145,16 @@ def create_audit_only_order_intent(client: TestClient, *, reset: bool = True) ->
     return order_intent_response.json()
 
 
+def enable_side_effect_auth(monkeypatch) -> dict[str, str]:
+    monkeypatch.setenv("DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_ADMIN_TOKEN", "admin-secret")
+    monkeypatch.setenv("DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_CSRF_TOKEN", "csrf-secret")
+    return {
+        "Authorization": "Bearer admin-secret",
+        "X-CSRF-Token": "csrf-secret",
+    }
+
+
 def test_submit_paper_broker_order_rejects_default_disabled_capability() -> None:
     client = TestClient(app)
     order_intent = create_audit_only_order_intent(client)
@@ -212,6 +223,107 @@ def test_submit_paper_broker_order_rejects_confirmation_phrase_with_extra_whites
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Confirmation phrase must be SUBMIT IBKR PAPER ORDER"
+
+
+def test_submit_paper_broker_order_requires_admin_auth_and_csrf_when_enabled(
+    monkeypatch,
+) -> None:
+    client = TestClient(app)
+    order_intent = create_audit_only_order_intent(client)
+    submitted_requests = []
+    valid_headers = enable_side_effect_auth(monkeypatch)
+
+    def enabled_capability(*_args, **_kwargs) -> BrokerOrderSubmissionCapability:
+        return BrokerOrderSubmissionCapability(
+            current_execution_mode="paper_broker",
+            paper_broker_submission_implemented=True,
+            paper_broker_submission_enabled=True,
+            broker_order_operation_available=True,
+            message=(
+                "IBKR paper order submission is enabled for the configured paper account; "
+                "live trading remains disabled."
+            ),
+        )
+
+    class FakeSubmitter:
+        def submit(self, settings, request):
+            submitted_requests.append(request)
+            return BrokerPaperOrderResult(
+                broker_order_id="12345",
+                status="Submitted",
+                raw_response={"broker_order_id": "12345", "status": "Submitted"},
+            )
+
+    monkeypatch.setattr(broker_routes, "build_order_submission_capability", enabled_capability)
+    monkeypatch.setattr(broker_routes, "paper_order_submitter", FakeSubmitter())
+
+    missing_auth = client.post(
+        "/api/broker/paper-order-submissions",
+        json={
+            "order_intent_id": order_intent["id"],
+            "user_confirmed": True,
+            "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+        },
+    )
+    assert missing_auth.status_code == 401
+    assert missing_auth.json()["detail"] == "Broker side-effect authorization is required"
+    assert submitted_requests == []
+
+    bad_csrf = client.post(
+        "/api/broker/paper-order-submissions",
+        headers={"Authorization": "Bearer admin-secret", "X-CSRF-Token": "wrong"},
+        json={
+            "order_intent_id": order_intent["id"],
+            "user_confirmed": True,
+            "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+        },
+    )
+    assert bad_csrf.status_code == 403
+    assert bad_csrf.json()["detail"] == "Valid broker side-effect CSRF token is required"
+    assert submitted_requests == []
+
+    authorized = client.post(
+        "/api/broker/paper-order-submissions",
+        headers=valid_headers,
+        json={
+            "order_intent_id": order_intent["id"],
+            "user_confirmed": True,
+            "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+        },
+    )
+    assert authorized.status_code == 201
+    assert authorized.json()["broker_order_id"] == "12345"
+    assert len(submitted_requests) == 1
+
+
+def test_submit_paper_broker_order_fails_closed_when_auth_is_required_but_not_configured(
+    monkeypatch,
+) -> None:
+    client = TestClient(app)
+    order_intent = create_audit_only_order_intent(client)
+    monkeypatch.setenv("DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED", "true")
+    monkeypatch.delenv("DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_ADMIN_TOKEN", raising=False)
+    monkeypatch.delenv("DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_CSRF_TOKEN", raising=False)
+
+    class FailIfCalledSubmitter:
+        def submit(self, settings, request):
+            raise AssertionError("broker submitter must not run when auth is misconfigured")
+
+    monkeypatch.setattr(broker_routes, "paper_order_submitter", FailIfCalledSubmitter())
+
+    response = client.post(
+        "/api/broker/paper-order-submissions",
+        json={
+            "order_intent_id": order_intent["id"],
+            "user_confirmed": True,
+            "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "Broker side-effect authorization is required but not configured"
+    )
 
 
 def test_submit_paper_broker_order_rejects_unknown_order_intent() -> None:
@@ -421,6 +533,370 @@ def test_submit_paper_broker_order_success_creates_separate_audit_artifact(monke
     assert duplicate.json()["detail"] == (
         "Paper broker submission already exists for this order intent"
     )
+
+
+def test_refresh_paper_broker_order_status_updates_existing_submission(monkeypatch) -> None:
+    client = TestClient(app)
+    order_intent = create_audit_only_order_intent(client)
+    polled_order_ids = []
+
+    def enabled_capability(*_args, **_kwargs) -> BrokerOrderSubmissionCapability:
+        return BrokerOrderSubmissionCapability(
+            current_execution_mode="paper_broker",
+            paper_broker_submission_implemented=True,
+            paper_broker_submission_enabled=True,
+            broker_order_operation_available=True,
+            message=(
+                "IBKR paper order submission is enabled for the configured paper account; "
+                "live trading remains disabled."
+            ),
+        )
+
+    class FakeSubmitter:
+        def submit(self, settings, request):
+            return BrokerPaperOrderResult(
+                broker_order_id="12345",
+                status="Submitted",
+                raw_response={"broker_order_id": "12345", "status": "Submitted"},
+            )
+
+    class FakeStatusPoller:
+        def poll(self, settings, broker_order_id):
+            polled_order_ids.append(broker_order_id)
+            return BrokerPaperOrderStatusResult(
+                broker_order_id=broker_order_id,
+                status="Filled",
+                raw_response={
+                    "broker_order_id": broker_order_id,
+                    "status": "Filled",
+                    "remaining": 0,
+                },
+            )
+
+    monkeypatch.setattr(broker_routes, "build_order_submission_capability", enabled_capability)
+    monkeypatch.setattr(broker_routes, "paper_order_submitter", FakeSubmitter())
+    monkeypatch.setattr(
+        broker_routes,
+        "paper_order_status_poller",
+        FakeStatusPoller(),
+        raising=False,
+    )
+
+    submission_response = client.post(
+        "/api/broker/paper-order-submissions",
+        json={
+            "order_intent_id": order_intent["id"],
+            "user_confirmed": True,
+            "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+        },
+    )
+    assert submission_response.status_code == 201
+    submission = submission_response.json()
+
+    response = client.post(
+        f"/api/broker/paper-order-submissions/{submission['id']}/status-refresh"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == submission["id"]
+    assert body["status"] == "submitted_to_paper_broker"
+    assert body["submitted_to_broker"] is True
+    assert body["latest_broker_order_status"] == "Filled"
+    assert body["broker_status_response"] == {
+        "broker_order_id": "12345",
+        "status": "Filled",
+        "remaining": 0,
+    }
+    assert body["broker_status_checked_at"] is not None
+    assert body["message"] == "IBKR paper order status refreshed; live trading remains disabled."
+    assert polled_order_ids == ["12345"]
+
+    history = client.get("/api/broker/paper-order-submissions").json()
+    assert history[-1]["id"] == submission["id"]
+    assert history[-1]["latest_broker_order_status"] == "Filled"
+
+
+def test_refresh_paper_broker_order_status_requires_admin_auth_and_csrf_when_enabled(
+    monkeypatch,
+) -> None:
+    client = TestClient(app)
+    order_intent = create_audit_only_order_intent(client)
+    polled_order_ids = []
+
+    def enabled_capability(*_args, **_kwargs) -> BrokerOrderSubmissionCapability:
+        return BrokerOrderSubmissionCapability(
+            current_execution_mode="paper_broker",
+            paper_broker_submission_implemented=True,
+            paper_broker_submission_enabled=True,
+            broker_order_operation_available=True,
+            message=(
+                "IBKR paper order submission is enabled for the configured paper account; "
+                "live trading remains disabled."
+            ),
+        )
+
+    class FakeSubmitter:
+        def submit(self, settings, request):
+            return BrokerPaperOrderResult(
+                broker_order_id="12345",
+                status="Submitted",
+                raw_response={"broker_order_id": "12345", "status": "Submitted"},
+            )
+
+    class FakeStatusPoller:
+        def poll(self, settings, broker_order_id):
+            polled_order_ids.append(broker_order_id)
+            return BrokerPaperOrderStatusResult(
+                broker_order_id=broker_order_id,
+                status="Filled",
+                raw_response={"broker_order_id": broker_order_id, "status": "Filled"},
+            )
+
+    monkeypatch.setattr(broker_routes, "build_order_submission_capability", enabled_capability)
+    monkeypatch.setattr(broker_routes, "paper_order_submitter", FakeSubmitter())
+    monkeypatch.setattr(
+        broker_routes,
+        "paper_order_status_poller",
+        FakeStatusPoller(),
+        raising=False,
+    )
+    submission_response = client.post(
+        "/api/broker/paper-order-submissions",
+        json={
+            "order_intent_id": order_intent["id"],
+            "user_confirmed": True,
+            "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+        },
+    )
+    assert submission_response.status_code == 201
+    submission_id = submission_response.json()["id"]
+    valid_headers = enable_side_effect_auth(monkeypatch)
+
+    missing_auth = client.post(
+        f"/api/broker/paper-order-submissions/{submission_id}/status-refresh"
+    )
+    assert missing_auth.status_code == 401
+    assert missing_auth.json()["detail"] == "Broker side-effect authorization is required"
+    assert polled_order_ids == []
+
+    bad_auth = client.post(
+        f"/api/broker/paper-order-submissions/{submission_id}/status-refresh",
+        headers={"Authorization": "Bearer wrong", "X-CSRF-Token": "csrf-secret"},
+    )
+    assert bad_auth.status_code == 403
+    assert bad_auth.json()["detail"] == "Valid broker side-effect authorization is required"
+    assert polled_order_ids == []
+
+    authorized = client.post(
+        f"/api/broker/paper-order-submissions/{submission_id}/status-refresh",
+        headers=valid_headers,
+    )
+    assert authorized.status_code == 200
+    assert authorized.json()["latest_broker_order_status"] == "Filled"
+    assert polled_order_ids == ["12345"]
+
+
+def test_refresh_paper_broker_order_status_rejects_unknown_submission() -> None:
+    client = TestClient(app)
+    client.post("/api/audit/reset", json={"confirmation": "RESET LOCAL AUDIT STATE"})
+
+    response = client.post("/api/broker/paper-order-submissions/999999/status-refresh")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Paper broker submission not found"
+
+
+def test_refresh_paper_broker_order_status_requires_submitted_broker_order(monkeypatch) -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    order_intent = create_audit_only_order_intent(client)
+
+    def enabled_capability(*_args, **_kwargs) -> BrokerOrderSubmissionCapability:
+        return BrokerOrderSubmissionCapability(
+            current_execution_mode="paper_broker",
+            paper_broker_submission_implemented=True,
+            paper_broker_submission_enabled=True,
+            broker_order_operation_available=True,
+            message=(
+                "IBKR paper order submission is enabled for the configured paper account; "
+                "live trading remains disabled."
+            ),
+        )
+
+    class FailingSubmitter:
+        def submit(self, settings, request):
+            raise RuntimeError("paper gateway timed out after placeOrder")
+
+    class FailIfCalledStatusPoller:
+        def poll(self, settings, broker_order_id):
+            raise AssertionError("failed/manual-review submissions must not be polled")
+
+    monkeypatch.setattr(broker_routes, "build_order_submission_capability", enabled_capability)
+    monkeypatch.setattr(broker_routes, "paper_order_submitter", FailingSubmitter())
+    monkeypatch.setattr(
+        broker_routes,
+        "paper_order_status_poller",
+        FailIfCalledStatusPoller(),
+        raising=False,
+    )
+
+    failed_submission_response = client.post(
+        "/api/broker/paper-order-submissions",
+        json={
+            "order_intent_id": order_intent["id"],
+            "user_confirmed": True,
+            "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+        },
+    )
+    assert failed_submission_response.status_code == 409
+    failed_submission = client.get("/api/broker/paper-order-submissions").json()[0]
+
+    response = client.post(
+        f"/api/broker/paper-order-submissions/{failed_submission['id']}/status-refresh"
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Only submitted IBKR paper orders with a broker order id can be refreshed"
+    )
+
+
+def test_paper_broker_submission_reserves_durable_pending_record_before_submitter_call(
+    monkeypatch,
+) -> None:
+    client = TestClient(app)
+    order_intent = create_audit_only_order_intent(client)
+    observed_persisted_statuses = []
+
+    def enabled_capability(*_args, **_kwargs) -> BrokerOrderSubmissionCapability:
+        return BrokerOrderSubmissionCapability(
+            current_execution_mode="paper_broker",
+            paper_broker_submission_implemented=True,
+            paper_broker_submission_enabled=True,
+            broker_order_operation_available=True,
+            message=(
+                "IBKR paper order submission is enabled for the configured paper account; "
+                "live trading remains disabled."
+            ),
+        )
+
+    class InspectingFakeSubmitter:
+        def submit(self, settings, request):
+            persisted_snapshot = stores.audit_snapshot_repository.load()
+            matching = [
+                submission
+                for submission in persisted_snapshot.paper_broker_order_submissions
+                if submission.order_intent_id == order_intent["id"]
+            ]
+            assert len(matching) == 1
+            observed_persisted_statuses.append(matching[0].status)
+            assert matching[0].status == "pending_broker_submission"
+            assert matching[0].submitted_to_broker is False
+            assert matching[0].broker_request == {
+                "symbol": "AAPL",
+                "side": "buy",
+                "quantity": 10,
+                "order_type": "market",
+                "limit_price": None,
+            }
+            return BrokerPaperOrderResult(
+                broker_order_id="12345",
+                status="Submitted",
+                raw_response={"broker_order_id": "12345", "status": "Submitted"},
+            )
+
+    monkeypatch.setattr(broker_routes, "build_order_submission_capability", enabled_capability)
+    monkeypatch.setattr(broker_routes, "paper_order_submitter", InspectingFakeSubmitter())
+
+    response = client.post(
+        "/api/broker/paper-order-submissions",
+        json={
+            "order_intent_id": order_intent["id"],
+            "user_confirmed": True,
+            "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+        },
+    )
+
+    assert response.status_code == 201
+    assert observed_persisted_statuses == ["pending_broker_submission"]
+    body = response.json()
+    assert body["status"] == "submitted_to_paper_broker"
+    assert body["submitted_to_broker"] is True
+    history = client.get("/api/broker/paper-order-submissions").json()
+    assert history[-1]["status"] == "submitted_to_paper_broker"
+    assert history[-1]["submitted_to_broker"] is True
+
+
+def test_paper_broker_submission_failure_records_manual_review_and_blocks_retry(
+    monkeypatch,
+) -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    order_intent = create_audit_only_order_intent(client)
+    submit_calls = 0
+
+    def enabled_capability(*_args, **_kwargs) -> BrokerOrderSubmissionCapability:
+        return BrokerOrderSubmissionCapability(
+            current_execution_mode="paper_broker",
+            paper_broker_submission_implemented=True,
+            paper_broker_submission_enabled=True,
+            broker_order_operation_available=True,
+            message=(
+                "IBKR paper order submission is enabled for the configured paper account; "
+                "live trading remains disabled."
+            ),
+        )
+
+    class FailingSubmitter:
+        def submit(self, settings, request):
+            nonlocal submit_calls
+            submit_calls += 1
+            raise RuntimeError("paper gateway timed out after placeOrder")
+
+    monkeypatch.setattr(broker_routes, "build_order_submission_capability", enabled_capability)
+    monkeypatch.setattr(broker_routes, "paper_order_submitter", FailingSubmitter())
+
+    response = client.post(
+        "/api/broker/paper-order-submissions",
+        json={
+            "order_intent_id": order_intent["id"],
+            "user_confirmed": True,
+            "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "IBKR paper order submission did not finish cleanly; "
+        "manual broker/account review is required before retry"
+    )
+    assert submit_calls == 1
+
+    history = client.get("/api/broker/paper-order-submissions").json()
+    assert len(history) == 1
+    assert history[0]["order_intent_id"] == order_intent["id"]
+    assert history[0]["status"] == "submission_failed_requires_manual_review"
+    assert history[0]["submitted_to_broker"] is False
+    assert history[0]["broker_response"] == {
+        "error": "paper gateway timed out after placeOrder",
+        "error_type": "RuntimeError",
+    }
+    assert history[0]["message"] == (
+        "IBKR paper order submission did not finish cleanly; "
+        "manual broker/account review is required before retry."
+    )
+
+    retry = client.post(
+        "/api/broker/paper-order-submissions",
+        json={
+            "order_intent_id": order_intent["id"],
+            "user_confirmed": True,
+            "confirmation_phrase": "SUBMIT IBKR PAPER ORDER",
+        },
+    )
+
+    assert retry.status_code == 409
+    assert retry.json()["detail"] == "Paper broker submission already exists for this order intent"
+    assert submit_calls == 1
 
 
 def test_concurrent_paper_broker_submissions_for_same_intent_call_submitter_once(

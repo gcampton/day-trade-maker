@@ -1,6 +1,6 @@
 from threading import Lock
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from day_trade_maker.broker import (
     EnvBrokerSettings,
@@ -11,6 +11,7 @@ from day_trade_maker.broker import (
 )
 from day_trade_maker.broker_orders import (
     BrokerPaperOrderRequest,
+    IbAsyncPaperOrderStatusPoller,
     IbAsyncPaperOrderSubmitter,
     PaperOrderSubmissionUnavailable,
 )
@@ -26,6 +27,7 @@ from day_trade_maker.schemas import (
     PaperOrderIntent,
     PaperOrderIntentCreate,
 )
+from day_trade_maker.security import require_broker_side_effect_authorization
 from day_trade_maker.stores import (
     paper_broker_order_submission_store,
     paper_order_intent_store,
@@ -36,6 +38,7 @@ from day_trade_maker.stores import (
 router = APIRouter(prefix="/api/broker", tags=["broker"])
 connectivity_probe = SocketConnectivityProbe()
 paper_order_submitter = IbAsyncPaperOrderSubmitter()
+paper_order_status_poller = IbAsyncPaperOrderStatusPoller()
 _submission_locks_guard = Lock()
 _submission_locks: dict[int, Lock] = {}
 
@@ -51,9 +54,72 @@ def list_paper_broker_order_submissions() -> list[PaperBrokerOrderSubmission]:
 
 
 @router.post(
+    "/paper-order-submissions/{submission_id}/status-refresh",
+    response_model=PaperBrokerOrderSubmission,
+    dependencies=[Depends(require_broker_side_effect_authorization)],
+)
+def refresh_paper_broker_order_submission_status(
+    submission_id: int,
+) -> PaperBrokerOrderSubmission:
+    settings = EnvBrokerSettings.from_environment()
+    submission = paper_broker_order_submission_store.get(submission_id)
+    if submission is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paper broker submission not found",
+        )
+    if not submission.submitted_to_broker or submission.broker_order_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only submitted IBKR paper orders with a broker order id can be refreshed",
+        )
+
+    account_snapshot = None
+    if settings.paper_order_submission_enabled:
+        account_snapshot = build_account_snapshot_reader(settings).read(settings)
+    capability = build_order_submission_capability(settings, account_snapshot)
+    if capability.live_broker_submission_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Live broker submission must remain disabled",
+        )
+    if not (
+        capability.paper_broker_submission_enabled
+        and capability.broker_order_operation_available
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="IBKR paper order status refresh is not enabled",
+        )
+
+    try:
+        status_result = paper_order_status_poller.poll(settings, submission.broker_order_id)
+    except PaperOrderSubmissionUnavailable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "IBKR paper order status refresh did not finish cleanly; "
+                "manual broker/account review is required"
+            ),
+        ) from exc
+
+    return paper_broker_order_submission_store.mark_status_refreshed(
+        submission_id=submission.id,
+        broker_order_status=status_result.status,
+        broker_status_response=status_result.raw_response,
+        message="IBKR paper order status refreshed; live trading remains disabled.",
+    )
+
+
+@router.post(
     "/paper-order-submissions",
     response_model=PaperBrokerOrderSubmission,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_broker_side_effect_authorization)],
 )
 def create_paper_broker_order_submission(
     payload: PaperBrokerOrderSubmissionCreate,
@@ -87,10 +153,7 @@ def _create_paper_broker_order_submission_with_lock(
     order_intent: PaperOrderIntent,
 ) -> PaperBrokerOrderSubmission:
     _validate_source_order_intent_for_paper_broker_submission(order_intent)
-    if any(
-        submission.order_intent_id == order_intent.id
-        for submission in paper_broker_order_submission_store.list()
-    ):
+    if paper_broker_order_submission_store.get_by_order_intent_id(order_intent.id) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Paper broker submission already exists for this order intent",
@@ -122,28 +185,62 @@ def _create_paper_broker_order_submission_with_lock(
         "order_type": request.order_type,
         "limit_price": request.limit_price,
     }
-    try:
-        broker_result = paper_order_submitter.submit(settings, request)
-    except PaperOrderSubmissionUnavailable as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-
-    return paper_broker_order_submission_store.create(
+    checks = [
+        "approved strategy",
+        "passed risk check",
+        "source order intent confirmed audit-only",
+        "paper broker submission enabled",
+        "live broker submission disabled",
+        "durable idempotency reservation created before broker placeOrder",
+    ]
+    pending_submission = paper_broker_order_submission_store.reserve_pending(
         order_intent_id=order_intent.id,
-        broker_order_id=broker_result.broker_order_id,
-        broker_response=broker_result.raw_response,
         order_intent_snapshot=order_intent,
         capability_snapshot=capability,
         broker_request=broker_request_snapshot,
-        checks=[
-            "approved strategy",
-            "passed risk check",
-            "source order intent confirmed audit-only",
-            "paper broker submission enabled",
-            "live broker submission disabled",
-        ],
+        checks=checks,
+        message=(
+            "IBKR paper order submission reserved before broker placeOrder; "
+            "do not retry until the broker state is resolved."
+        ),
+    )
+    try:
+        broker_result = paper_order_submitter.submit(settings, request)
+    except PaperOrderSubmissionUnavailable as exc:
+        _mark_submission_failed_requires_manual_review(pending_submission.id, exc)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        _mark_submission_failed_requires_manual_review(pending_submission.id, exc)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        _mark_submission_failed_requires_manual_review(pending_submission.id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "IBKR paper order submission did not finish cleanly; "
+                "manual broker/account review is required before retry"
+            ),
+        ) from exc
+
+    return paper_broker_order_submission_store.mark_submitted(
+        submission_id=pending_submission.id,
+        broker_order_id=broker_result.broker_order_id,
+        broker_response=broker_result.raw_response,
         message="IBKR paper order submitted; live trading remains disabled.",
+    )
+
+
+def _mark_submission_failed_requires_manual_review(
+    submission_id: int,
+    exc: Exception,
+) -> PaperBrokerOrderSubmission:
+    return paper_broker_order_submission_store.mark_failed_requires_manual_review(
+        submission_id=submission_id,
+        broker_response={"error": str(exc), "error_type": type(exc).__name__},
+        message=(
+            "IBKR paper order submission did not finish cleanly; "
+            "manual broker/account review is required before retry."
+        ),
     )
 
 

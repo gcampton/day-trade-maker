@@ -706,6 +706,23 @@ describe('App', () => {
     expect(screen.getByText(/no IBKR orders are submitted/i)).toBeInTheDocument();
   });
 
+  it('renders paper-broker mode explicitly when IBKR paper submission is enabled', async () => {
+    const fetchMock = mockTradingApi({ brokerSafetySummary: enabledBrokerSafetySummary });
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/broker/safety-summary');
+    });
+    expect(
+      await screen.findByText(/interactive brokers paper, ibkr paper-account submission enabled/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^IBKR paper-account order submission only$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/interactive brokers paper, audit-only/i)).not.toBeInTheDocument();
+  });
+
   it('renders explicit disabled IBKR paper order submission capability', async () => {
     const fetchMock = mockTradingApi();
 
@@ -807,7 +824,7 @@ describe('App', () => {
 
     await reachPassedBrokerReadiness();
 
-    fireEvent.click(await screen.findByRole('button', { name: /record paper order intent/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /record audit-only paper order intent/i }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/broker/order-intents', expect.any(Object));
@@ -835,6 +852,39 @@ describe('App', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/broker/order-intents');
     expect(screen.getByText(/paper order intent audit log/i)).toBeInTheDocument();
     expect(screen.getByText(/AAPL buy 10/i)).toBeInTheDocument();
+  });
+
+  it('blocks new audit-only order intents when broker order operations are available', async () => {
+    const emptyAuditSnapshot = {
+      ...auditSnapshotWithoutPaperBrokerSubmissions,
+      paper_order_intents: [],
+      paper_broker_order_submissions: [],
+    };
+    const fetchMock = mockTradingApi({
+      auditSnapshot: emptyAuditSnapshot,
+      brokerSafetySummary: enabledBrokerSafetySummary,
+      paperBrokerOrderSubmissions: [],
+    });
+
+    render(<App />);
+
+    await reachPassedBrokerReadiness();
+    fireEvent.click(screen.getByRole('button', { name: /check ibkr status/i }));
+
+    const auditOnlyIntentButton = await screen.findByRole('button', {
+      name: /record audit-only paper order intent/i,
+    });
+    expect(auditOnlyIntentButton).toBeDisabled();
+    expect(
+      await screen.findByText(
+        /broker order operations are available; disable ibkr paper submission before recording a new audit-only order intent/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) => url === '/api/broker/order-intents' && init?.method === 'POST',
+      ),
+    ).toBe(false);
   });
 
   it('renders disabled IBKR paper submission copy for an audit-only order intent', async () => {
@@ -990,7 +1040,7 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText(/order side/i), { target: { value: 'sell' } });
     fireEvent.change(screen.getByLabelText(/order quantity/i), { target: { value: '3' } });
 
-    fireEvent.click(await screen.findByRole('button', { name: /record paper order intent/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /record audit-only paper order intent/i }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/broker/order-intents', expect.any(Object));
@@ -1019,7 +1069,7 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText(/order type/i), { target: { value: 'limit' } });
     fireEvent.change(screen.getByLabelText(/limit price/i), { target: { value: '411.25' } });
 
-    fireEvent.click(await screen.findByRole('button', { name: /record paper order intent/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /record audit-only paper order intent/i }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/broker/order-intents', expect.any(Object));
@@ -1045,13 +1095,13 @@ describe('App', () => {
     await reachPassedBrokerReadiness();
     fireEvent.change(await screen.findByLabelText(/order quantity/i), { target: { value: '0' } });
 
-    expect(screen.getByRole('button', { name: /record paper order intent/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /record audit-only paper order intent/i })).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText(/order quantity/i), { target: { value: '10' } });
     fireEvent.change(screen.getByLabelText(/order type/i), { target: { value: 'limit' } });
     fireEvent.change(screen.getByLabelText(/limit price/i), { target: { value: '0' } });
 
-    expect(screen.getByRole('button', { name: /record paper order intent/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /record audit-only paper order intent/i })).toBeDisabled();
   });
 
   it('exports the audit snapshot as editable local JSON', async () => {

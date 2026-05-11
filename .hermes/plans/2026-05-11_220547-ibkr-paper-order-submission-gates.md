@@ -607,6 +607,7 @@ npm run build
 - Resolved during continuation: the app persists explicit/operator-triggered IBKR paper order status refreshes on the existing `PaperBrokerOrderSubmission` record (`latest_broker_order_status`, `broker_status_checked_at`, `broker_status_response`).
 - Resolved during continuation: the confirmation phrase remains backend-configurable via env and is surfaced through broker capability/safety-summary responses so the UI posts the exact backend-required phrase.
 - Resolved during continuation: keep the IBKR paper submission panel visible as disabled educational safety copy unless backend capability enables the exact paper-account submission flow.
+- Resolved during continuation: frontend broker-readiness copy now reflects `paper_broker` mode instead of hardcoding audit-only labels, and the UI disables new audit-only intent recording while broker order operations are currently available.
 
 ## Recommended Implementation Order
 

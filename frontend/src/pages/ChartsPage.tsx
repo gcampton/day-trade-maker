@@ -476,6 +476,18 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   const currentIntentPaperBrokerSubmission = orderIntent
     ? (paperBrokerSubmissionHistory.find((submission) => submission.order_intent_id === orderIntent.id) ?? paperBrokerSubmission)
     : null;
+  const brokerOrderOperationActive = Boolean(
+    brokerOrderSubmissionCapability &&
+      (brokerOrderSubmissionCapability.paper_broker_submission_enabled ||
+        brokerOrderSubmissionCapability.live_broker_submission_enabled ||
+        brokerOrderSubmissionCapability.broker_order_operation_available),
+  );
+  const canRecordAuditOnlyOrderIntent = Boolean(
+    riskCheck?.status === 'passed' &&
+      isOrderTicketValid &&
+      !isCreatingOrderIntent &&
+      !brokerOrderOperationActive,
+  );
   const isPaperBrokerSubmissionEnabled = Boolean(
     brokerOrderSubmissionCapability?.paper_broker_submission_enabled &&
       brokerOrderSubmissionCapability.broker_order_operation_available &&
@@ -674,7 +686,11 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
             <dl className="backtest-summary" aria-label="Broker safety summary">
               <div>
                 <dt>Broker safety summary</dt>
-                <dd>Interactive Brokers paper, audit-only</dd>
+                <dd>
+                  {brokerSafetySummary.current_execution_mode === 'paper_broker'
+                    ? 'Interactive Brokers paper, IBKR paper-account submission enabled'
+                    : 'Interactive Brokers paper, audit-only'}
+                </dd>
               </div>
               <div>
                 <dt>Primary order boundary</dt>
@@ -853,7 +869,11 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
             <dl className="backtest-summary">
               <div>
                 <dt>Execution mode</dt>
-                <dd>Audit-only order intents</dd>
+                <dd>
+                  {brokerCapabilities.current_execution_mode === 'paper_broker'
+                    ? 'IBKR paper-account order submission only'
+                    : 'Audit-only order intents'}
+                </dd>
               </div>
               <div>
                 <dt>Paper broker submission</dt>
@@ -999,15 +1019,23 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
 
           <button
             type="button"
-            disabled={riskCheck?.status !== 'passed' || !isOrderTicketValid || isCreatingOrderIntent}
+            disabled={!canRecordAuditOnlyOrderIntent}
             onClick={handleCreateOrderIntent}
           >
-            {isCreatingOrderIntent ? 'Recording paper order intent…' : 'Record paper order intent'}
+            {isCreatingOrderIntent
+              ? 'Recording audit-only paper order intent…'
+              : 'Record audit-only paper order intent'}
           </button>
           <p className="muted">
             This records an explicit paper-mode order intent for audit only; it does not submit to
             IBKR.
           </p>
+          {brokerOrderOperationActive ? (
+            <p className="error">
+              Broker order operations are available; disable IBKR paper submission before recording a
+              new audit-only order intent.
+            </p>
+          ) : null}
 
           {orderIntent ? (
             <div className="success">

@@ -141,6 +141,8 @@ export type BrokerAccountSnapshot = {
   mode: 'paper';
   read_only: boolean;
   order_submission_enabled: boolean;
+  account_snapshot_enabled: boolean;
+  account_data_loaded: boolean;
   account_id: string | null;
   balances: Array<Record<string, string | number>>;
   positions: Array<Record<string, string | number>>;

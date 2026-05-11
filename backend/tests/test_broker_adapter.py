@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from day_trade_maker.broker import (
     EnvBrokerSettings,
     SocketConnectivityProbe,
+    StaticAccountSnapshotReader,
     build_read_only_broker_status,
 )
 
@@ -30,6 +31,7 @@ def test_env_broker_settings_reads_safe_defaults() -> None:
     assert settings.client_id == 1
     assert settings.connectivity_probe_enabled is False
     assert settings.connectivity_probe_timeout_seconds == 1.0
+    assert settings.account_snapshot_enabled is False
 
 
 def test_env_broker_settings_reads_opt_in_probe_configuration() -> None:
@@ -40,6 +42,7 @@ def test_env_broker_settings_reads_opt_in_probe_configuration() -> None:
             "DAY_TRADE_MAKER_IBKR_CLIENT_ID": "17",
             "DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_ENABLED": "yes",
             "DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_TIMEOUT_SECONDS": "0.25",
+            "DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_ENABLED": "true",
         }
     ):
         settings = EnvBrokerSettings.from_environment()
@@ -49,6 +52,7 @@ def test_env_broker_settings_reads_opt_in_probe_configuration() -> None:
     assert settings.client_id == 17
     assert settings.connectivity_probe_enabled is True
     assert settings.connectivity_probe_timeout_seconds == 0.25
+    assert settings.account_snapshot_enabled is True
 
 
 def test_socket_connectivity_probe_disabled_default_never_calls_socket_factory() -> None:
@@ -116,6 +120,48 @@ def test_socket_connectivity_probe_enabled_reports_unreachable_without_raising()
     assert result.read_only is True
     assert result.order_submission_enabled is False
     assert result.account_data_loaded is False
+
+
+def test_static_account_snapshot_reader_disabled_returns_empty_read_only_snapshot() -> None:
+    settings = EnvBrokerSettings(account_snapshot_enabled=False)
+    reader = StaticAccountSnapshotReader()
+
+    snapshot = reader.read(settings)
+
+    assert snapshot.account_snapshot_enabled is False
+    assert snapshot.account_data_loaded is False
+    assert snapshot.read_only is True
+    assert snapshot.order_submission_enabled is False
+    assert snapshot.account_id is None
+    assert snapshot.balances == []
+    assert snapshot.positions == []
+    assert snapshot.message == (
+        "IBKR account snapshot is read-only and disabled; no account or order operation "
+        "was attempted."
+    )
+
+
+def test_static_account_snapshot_reader_enabled_returns_read_only_fixture_snapshot() -> None:
+    settings = EnvBrokerSettings(account_snapshot_enabled=True)
+    reader = StaticAccountSnapshotReader(
+        account_id="DU1234567",
+        balances=[{"tag": "NetLiquidation", "value": 25000.0, "currency": "USD"}],
+        positions=[{"symbol": "AAPL", "quantity": 10, "market_value": 1900.0}],
+    )
+
+    snapshot = reader.read(settings)
+
+    assert snapshot.account_snapshot_enabled is True
+    assert snapshot.account_data_loaded is True
+    assert snapshot.read_only is True
+    assert snapshot.order_submission_enabled is False
+    assert snapshot.account_id == "DU1234567"
+    assert snapshot.balances == [{"tag": "NetLiquidation", "value": 25000.0, "currency": "USD"}]
+    assert snapshot.positions == [{"symbol": "AAPL", "quantity": 10, "market_value": 1900.0}]
+    assert snapshot.message == (
+        "Read-only IBKR account snapshot loaded from the configured account reader; "
+        "no order operation was attempted."
+    )
 
 
 def test_build_read_only_broker_status_uses_settings_without_probe_side_effects() -> None:

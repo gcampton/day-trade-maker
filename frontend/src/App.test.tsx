@@ -177,10 +177,13 @@ const brokerAccount = {
   mode: 'paper',
   read_only: true,
   order_submission_enabled: false,
+  account_snapshot_enabled: false,
+  account_data_loaded: false,
   account_id: null,
   balances: [],
   positions: [],
-  message: 'IBKR account snapshot is read-only and empty until a broker session is connected.',
+  message:
+    'IBKR account snapshot is read-only and disabled; no account or order operation was attempted.',
 };
 
 const brokerConnectivityProbe = {
@@ -505,8 +508,10 @@ describe('App', () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/broker/account');
     });
-    expect(await screen.findByText(/account snapshot/i)).toBeInTheDocument();
-    expect(screen.getByText(/read-only empty until connected/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/account snapshot/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/no account or order operation was attempted/i)).toBeInTheDocument();
+    expect(screen.getByText(/account snapshot enabled: no/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/account data loaded: no/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/0 balances/i)).toBeInTheDocument();
     expect(screen.getByText(/0 positions/i)).toBeInTheDocument();
     expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);
@@ -528,7 +533,7 @@ describe('App', () => {
     expect(screen.getByText(/probe enabled: no/i)).toBeInTheDocument();
     expect(screen.getByText(/probe attempted: no/i)).toBeInTheDocument();
     expect(screen.getByText(/probe timeout: 1s/i)).toBeInTheDocument();
-    expect(screen.getByText(/account data loaded: no/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/account data loaded: no/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/order submission disabled/i).length).toBeGreaterThan(0);
   });
 

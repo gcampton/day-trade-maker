@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from day_trade_maker.schemas import BrokerConnectivityProbe, BrokerStatus
+from day_trade_maker.schemas import BrokerAccountSnapshot, BrokerConnectivityProbe, BrokerStatus
 
 
 class ClosableSocket(Protocol):
@@ -23,6 +23,7 @@ class EnvBrokerSettings:
     client_id: int = 1
     connectivity_probe_enabled: bool = False
     connectivity_probe_timeout_seconds: float = 1.0
+    account_snapshot_enabled: bool = False
 
     @classmethod
     def from_environment(cls) -> EnvBrokerSettings:
@@ -35,6 +36,9 @@ class EnvBrokerSettings:
             ),
             connectivity_probe_timeout_seconds=float(
                 os.environ.get("DAY_TRADE_MAKER_IBKR_CONNECTIVITY_PROBE_TIMEOUT_SECONDS", "1.0")
+            ),
+            account_snapshot_enabled=_env_flag_enabled(
+                "DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_ENABLED"
             ),
         )
 
@@ -55,6 +59,39 @@ def build_read_only_broker_status(settings: EnvBrokerSettings) -> BrokerStatus:
         ),
         message="IBKR read-only scaffold is configured; no broker session is connected.",
     )
+
+
+class StaticAccountSnapshotReader:
+    def __init__(
+        self,
+        account_id: str | None = None,
+        balances: list[dict[str, str | float]] | None = None,
+        positions: list[dict[str, str | float]] | None = None,
+    ) -> None:
+        self.account_id = account_id
+        self.balances = balances or []
+        self.positions = positions or []
+
+    def read(self, settings: EnvBrokerSettings) -> BrokerAccountSnapshot:
+        if not settings.account_snapshot_enabled:
+            return BrokerAccountSnapshot(
+                message=(
+                    "IBKR account snapshot is read-only and disabled; no account or "
+                    "order operation was attempted."
+                ),
+            )
+
+        return BrokerAccountSnapshot(
+            account_snapshot_enabled=True,
+            account_data_loaded=True,
+            account_id=self.account_id,
+            balances=self.balances,
+            positions=self.positions,
+            message=(
+                "Read-only IBKR account snapshot loaded from the configured account reader; "
+                "no order operation was attempted."
+            ),
+        )
 
 
 class SocketConnectivityProbe:

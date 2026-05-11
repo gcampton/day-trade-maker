@@ -49,7 +49,8 @@ def test_get_broker_status_returns_read_only_ibkr_paper_snapshot() -> None:
     )
 
 
-def test_get_broker_account_returns_read_only_empty_account_snapshot() -> None:
+def test_get_broker_account_returns_read_only_empty_account_snapshot(monkeypatch) -> None:
+    monkeypatch.delenv("DAY_TRADE_MAKER_IBKR_ACCOUNT_SNAPSHOT_ENABLED", raising=False)
     client = TestClient(app)
 
     response = client.get("/api/broker/account")
@@ -59,9 +60,15 @@ def test_get_broker_account_returns_read_only_empty_account_snapshot() -> None:
     assert body["provider"] == "interactive_brokers"
     assert body["mode"] == "paper"
     assert body["read_only"] is True
+    assert body["account_snapshot_enabled"] is False
+    assert body["account_data_loaded"] is False
     assert body["positions"] == []
     assert body["balances"] == []
     assert body["order_submission_enabled"] is False
+    assert body["message"] == (
+        "IBKR account snapshot is read-only and disabled; no account or order operation "
+        "was attempted."
+    )
 
 
 def test_get_broker_connectivity_probe_is_read_only_and_disabled_by_default(monkeypatch) -> None:

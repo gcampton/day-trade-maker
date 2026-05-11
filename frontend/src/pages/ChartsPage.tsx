@@ -592,6 +592,14 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                 <dd>{brokerAccount.account_id ?? 'Read-only empty until connected'}</dd>
               </div>
               <div>
+                <dt>Account snapshot enabled</dt>
+                <dd>Account snapshot enabled: {brokerAccount.account_snapshot_enabled ? 'yes' : 'no'}</dd>
+              </div>
+              <div>
+                <dt>Account data loaded</dt>
+                <dd>Account data loaded: {brokerAccount.account_data_loaded ? 'yes' : 'no'}</dd>
+              </div>
+              <div>
                 <dt>Balances</dt>
                 <dd>{brokerAccount.balances.length} balances</dd>
               </div>
@@ -606,6 +614,10 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
                     ? 'Order submission enabled'
                     : 'Order submission disabled'}
                 </dd>
+              </div>
+              <div>
+                <dt>Account note</dt>
+                <dd>{brokerAccount.message}</dd>
               </div>
             </dl>
           ) : null}

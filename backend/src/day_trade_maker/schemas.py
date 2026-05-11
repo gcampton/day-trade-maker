@@ -177,6 +177,8 @@ class BrokerAccountSnapshot(BaseModel):
     mode: Literal["paper"] = "paper"
     read_only: bool = True
     order_submission_enabled: bool = False
+    account_snapshot_enabled: bool = False
+    account_data_loaded: bool = False
     account_id: str | None = None
     balances: list[dict[str, str | float]] = Field(default_factory=list)
     positions: list[dict[str, str | float]] = Field(default_factory=list)

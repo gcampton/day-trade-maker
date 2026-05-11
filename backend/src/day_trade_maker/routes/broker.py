@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, status
 from day_trade_maker.broker import (
     EnvBrokerSettings,
     SocketConnectivityProbe,
+    StaticAccountSnapshotReader,
     build_read_only_broker_status,
 )
 from day_trade_maker.schemas import (
@@ -21,6 +22,7 @@ from day_trade_maker.stores import (
 
 router = APIRouter(prefix="/api/broker", tags=["broker"])
 connectivity_probe = SocketConnectivityProbe()
+account_snapshot_reader = StaticAccountSnapshotReader()
 
 
 @router.get("/order-intents", response_model=list[PaperOrderIntent])
@@ -50,9 +52,7 @@ def get_broker_connectivity_probe() -> BrokerConnectivityProbe:
 
 @router.get("/account", response_model=BrokerAccountSnapshot)
 def get_broker_account() -> BrokerAccountSnapshot:
-    return BrokerAccountSnapshot(
-        message="IBKR account snapshot is read-only and empty until a broker session is connected.",
-    )
+    return account_snapshot_reader.read(EnvBrokerSettings.from_environment())
 
 
 @router.post(

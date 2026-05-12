@@ -47,28 +47,33 @@ Notes:
 
 ## Manual smoke flow
 
-1. Start IBKR Gateway or TWS logged into the target paper account.
-2. Start the backend with the paper submission env vars above.
-3. Load `GET /api/broker/safety-summary`.
-4. Confirm:
-   - `current_execution_mode="paper_broker"`
-   - `paper_broker_submission_enabled=true`
-   - `broker_order_operation_available=true`
-   - `live_broker_submission_enabled=false`
-   - `account_id` matches `DAY_TRADE_MAKER_IBKR_PAPER_ACCOUNT_ID`
-   - `checked_at` is current and within `max_age_seconds`
-5. In the UI, create or restore the research chain:
+Use a two-phase flow so the audit-only intent is created while broker order operations are disabled, then submitted after the paper-account side-effect gates are enabled.
+
+1. Start the backend with default/disabled broker-order env.
+2. In the UI, create or restore the research chain:
    - transcript
    - approved strategy
    - imported market data
    - backtest
    - passed risk check
    - audit-only paper order intent, using either market order type or a limit order with a positive limit price
-6. Enter the broker side-effect admin token and CSRF token in the UI if `DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED=true`.
-7. Type the exact phrase shown by the UI / `paper_order_submission_confirmation_phrase` (default: `SUBMIT IBKR PAPER ORDER`).
-8. Click `Submit to IBKR paper account`.
-9. Verify the returned broker order id/status in the UI and in the exported audit snapshot.
-10. To refresh status later, click `Refresh IBKR paper order status`; this uses the same paper-account safety gates and persists `latest_broker_order_status`, `broker_status_checked_at`, and the raw status response on the existing submission artifact.
+3. Stop the backend.
+4. Start IBKR Gateway or TWS logged into the target paper account.
+5. Restart the backend with the paper submission env vars above.
+6. Load `GET /api/broker/safety-summary`.
+7. Confirm:
+   - `current_execution_mode="paper_broker"`
+   - `paper_broker_submission_enabled=true`
+   - `broker_order_operation_available=true`
+   - `live_broker_submission_enabled=false`
+   - `account_id` matches `DAY_TRADE_MAKER_IBKR_PAPER_ACCOUNT_ID`
+   - `checked_at` is current and within `max_age_seconds`
+8. In the UI, use the restored audit-only order intent. Do not create a new audit-only order intent while broker order operations are enabled; the backend and UI intentionally block that ambiguous flow.
+9. Enter the broker side-effect admin token and CSRF token in the UI if `DAY_TRADE_MAKER_BROKER_SIDE_EFFECT_AUTH_REQUIRED=true`.
+10. Type the exact phrase shown by the UI / `paper_order_submission_confirmation_phrase` (default: `SUBMIT IBKR PAPER ORDER`).
+11. Click `Submit to IBKR paper account`.
+12. Verify the returned broker order id/status in the UI and in the exported audit snapshot.
+13. To refresh status later, click `Refresh IBKR paper order status`; this uses the same paper-account safety gates and persists `latest_broker_order_status`, `broker_status_checked_at`, and the raw status response on the existing submission artifact.
 
 ## Emergency disable
 

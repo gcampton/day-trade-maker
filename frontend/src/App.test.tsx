@@ -493,6 +493,23 @@ describe('App', () => {
     expect(screen.getByText(/youtube transcript strategy lab/i)).toBeInTheDocument();
   });
 
+  it('breaks the trading workspace into terminal tabs', () => {
+    render(<App />);
+
+    const tablist = screen.getByRole('tablist', { name: /trading terminal sections/i });
+    expect(tablist).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /chart/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /market data/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /backtest/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /ibkr & orders/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /audit archive/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /ibkr & orders/i }));
+
+    expect(screen.getByRole('tab', { name: /chart/i })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: /ibkr & orders/i })).toHaveAttribute('aria-selected', 'true');
+  });
+
   it('loads persisted transcripts and strategy candidates on startup', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
       if (url === '/api/transcripts') {

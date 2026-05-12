@@ -54,11 +54,22 @@ const exampleCsv = `timestamp,open,high,low,close,volume
 
 const defaultPaperBrokerSubmissionConfirmationPhrase = 'SUBMIT IBKR PAPER ORDER';
 
+type WorkspaceTab = 'chart' | 'market' | 'backtest' | 'broker' | 'audit';
+
+const workspaceTabs: Array<{ id: WorkspaceTab; label: string }> = [
+  { id: 'chart', label: 'Chart' },
+  { id: 'market', label: 'Market Data' },
+  { id: 'backtest', label: 'Backtest' },
+  { id: 'broker', label: 'IBKR & Orders' },
+  { id: 'audit', label: 'Audit Archive' },
+];
+
 type ChartsPageProps = {
   selectedStrategy: StrategyCandidate | null;
 };
 
 export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTab>('chart');
   const [symbol, setSymbol] = useState('AAPL');
   const [timeframe, setTimeframe] = useState('5m');
   const [csvText, setCsvText] = useState(exampleCsv);
@@ -503,7 +514,38 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
 
   return (
     <section id="market-workspace" className="chart-workspace-grid" aria-label="Market data chart workspace">
-      <aside className="workspace-sidebar" aria-label="Market data and audit controls">
+      <div className="terminal-tabs" role="tablist" aria-label="Trading terminal sections">
+        {workspaceTabs.map((tab) => (
+          <button
+            aria-controls={`workspace-tab-${tab.id}`}
+            aria-selected={activeWorkspaceTab === tab.id}
+            className="terminal-tab"
+            id={`workspace-tab-${tab.id}-trigger`}
+            key={tab.id}
+            onClick={() => setActiveWorkspaceTab(tab.id)}
+            role="tab"
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <section
+        aria-labelledby="workspace-tab-chart-trigger"
+        className={workspaceTabPanelClassName(activeWorkspaceTab, 'chart')}
+        id="workspace-tab-chart"
+        role="tabpanel"
+      >
+        <KLineStrategyChart candles={candles} markers={backtestMarkers} />
+      </section>
+
+      <section
+        aria-labelledby="workspace-tab-market-trigger"
+        className={workspaceTabPanelClassName(activeWorkspaceTab, 'market')}
+        id="workspace-tab-market"
+        role="tabpanel"
+      >
         <form className="market-data-form" onSubmit={handleImport}>
         <div className="form-heading">
           <p className="eyebrow">Market Data</p>
@@ -543,7 +585,14 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
         ) : null}
         {error ? <p className="error">{error}</p> : null}
       </form>
+      </section>
 
+      <section
+        aria-labelledby="workspace-tab-audit-trigger"
+        className={workspaceTabPanelClassName(activeWorkspaceTab, 'audit')}
+        id="workspace-tab-audit"
+        role="tabpanel"
+      >
         <section id="audit-archive" className="market-data-form" aria-label="Audit snapshot controls">
         <div className="form-heading">
           <p className="eyebrow">Audit Archive</p>
@@ -624,9 +673,14 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
           {isResettingAudit ? 'Resetting local audit state…' : 'Reset local audit state'}
         </button>
         </section>
-      </aside>
+      </section>
 
-      <section className="chart-stack">
+      <section
+        aria-labelledby="workspace-tab-backtest-trigger"
+        className={workspaceTabPanelClassName(activeWorkspaceTab, 'backtest')}
+        id="workspace-tab-backtest"
+        role="tabpanel"
+      >
         <section className="backtest-panel" aria-label="Backtest controls">
           <div className="form-heading">
             <p className="eyebrow">Backtesting</p>
@@ -665,7 +719,14 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
             </dl>
           ) : null}
         </section>
+      </section>
 
+      <section
+        aria-labelledby="workspace-tab-broker-trigger"
+        className={workspaceTabPanelClassName(activeWorkspaceTab, 'broker')}
+        id="workspace-tab-broker"
+        role="tabpanel"
+      >
         <section id="safety-gates" className="backtest-panel" aria-label="Broker readiness controls">
           <div className="form-heading">
             <p className="eyebrow">IBKR Safety Gate</p>
@@ -1216,11 +1277,13 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
             </section>
           ) : null}
         </section>
-
-        <KLineStrategyChart candles={candles} markers={backtestMarkers} />
       </section>
     </section>
   );
+}
+
+function workspaceTabPanelClassName(activeWorkspaceTab: WorkspaceTab, tab: WorkspaceTab): string {
+  return activeWorkspaceTab === tab ? 'workspace-tab-panel workspace-tab-panel-active' : 'workspace-tab-panel';
 }
 
 function paperBrokerSubmissionClassName(submission: PaperBrokerOrderSubmission): string {

@@ -413,41 +413,61 @@ blockquote {
 
 .chart-workspace-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0.75rem;
-  align-items: start;
+  min-height: min(760px, calc(100vh - 220px));
+  align-items: stretch;
 }
 
-.workspace-sidebar {
-  position: sticky;
-  top: 0;
-  display: grid;
-  gap: 0.75rem;
-  max-height: calc(100vh - 170px);
-  overflow: auto;
-  scrollbar-color: hsl(217 33% 28%) transparent;
+.terminal-tabs {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.35rem;
+  background: hsl(222 47% 6% / 0.92);
 }
 
-.workspace-sidebar .market-data-form {
-  background: hsl(222 47% 8% / 0.94);
+.terminal-tab {
+  flex: 0 0 auto;
+  border-color: transparent;
+  color: var(--muted);
+  background: transparent;
+  box-shadow: none;
 }
 
-.chart-stack {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(300px, 1fr));
-  gap: 0.75rem;
-  align-items: start;
+.terminal-tab[aria-selected='true'] {
+  color: var(--primary-foreground);
+  border-color: hsl(188 94% 44% / 0.55);
+  background: linear-gradient(180deg, hsl(188 94% 58%), hsl(188 94% 43%));
+}
+
+.workspace-tab-panel {
+  display: none;
   min-width: 0;
+  min-height: 0;
+}
+
+.workspace-tab-panel-active {
+  display: block;
+}
+
+.workspace-tab-panel > .market-data-form,
+.workspace-tab-panel > .backtest-panel,
+.workspace-tab-panel > .chart-panel {
+  min-height: min(660px, calc(100vh - 280px));
+  max-height: min(760px, calc(100vh - 240px));
+  overflow: auto;
 }
 
 .chart-panel {
-  order: -1;
-  grid-column: 1 / -1;
-  min-height: 460px;
+  min-height: min(660px, calc(100vh - 280px));
 }
 
 #safety-gates {
-  max-height: calc(100vh - 170px);
+  max-height: min(760px, calc(100vh - 240px));
   overflow: auto;
 }
 
@@ -569,13 +589,11 @@ ul {
 
   .terminal-layout,
   .chart-workspace-grid,
-  .workflow-grid,
-  .chart-stack {
+  .workflow-grid {
     grid-template-columns: 1fr;
   }
 
   .terminal-rail,
-  .workspace-sidebar,
   #safety-gates,
   .transcript-form,
   .strategy-panel {
@@ -584,7 +602,6 @@ ul {
   }
 
   .terminal-main,
-  .workspace-sidebar,
   #safety-gates {
     overflow: visible;
   }

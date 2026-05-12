@@ -502,8 +502,9 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
   );
 
   return (
-    <section className="chart-workspace-grid" aria-label="Market data chart workspace">
-      <form className="market-data-form" onSubmit={handleImport}>
+    <section id="market-workspace" className="chart-workspace-grid" aria-label="Market data chart workspace">
+      <aside className="workspace-sidebar" aria-label="Market data and audit controls">
+        <form className="market-data-form" onSubmit={handleImport}>
         <div className="form-heading">
           <p className="eyebrow">Market Data</p>
           <h2>Import OHLCV CSV</h2>
@@ -543,7 +544,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
         {error ? <p className="error">{error}</p> : null}
       </form>
 
-      <section className="market-data-form" aria-label="Audit snapshot controls">
+        <section id="audit-archive" className="market-data-form" aria-label="Audit snapshot controls">
         <div className="form-heading">
           <p className="eyebrow">Audit Archive</p>
           <h2>Export/import local audit snapshot</h2>
@@ -622,7 +623,8 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
         >
           {isResettingAudit ? 'Resetting local audit state…' : 'Reset local audit state'}
         </button>
-      </section>
+        </section>
+      </aside>
 
       <section className="chart-stack">
         <section className="backtest-panel" aria-label="Backtest controls">
@@ -664,7 +666,7 @@ export function ChartsPage({ selectedStrategy }: ChartsPageProps) {
           ) : null}
         </section>
 
-        <section className="backtest-panel" aria-label="Broker readiness controls">
+        <section id="safety-gates" className="backtest-panel" aria-label="Broker readiness controls">
           <div className="form-heading">
             <p className="eyebrow">IBKR Safety Gate</p>
             <h2>Broker readiness</h2>

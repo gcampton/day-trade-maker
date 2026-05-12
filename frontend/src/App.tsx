@@ -47,49 +47,77 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <section className="hero-panel">
-        <p className="eyebrow">YouTube transcript strategy lab</p>
-        <h1>Day Trade Maker</h1>
-        <p className="lede">
-          Research day-trading ideas from transcripts, turn them into structured strategy
-          hypotheses, backtest them, and keep Interactive Brokers execution behind paper-mode
-          risk controls.
-        </p>
-      </section>
+      <header className="terminal-topbar">
+        <div>
+          <p className="eyebrow">YouTube transcript strategy lab</p>
+          <h1>Day Trade Maker</h1>
+        </div>
+        <div className="topbar-status" aria-label="Execution safety status">
+          <span className="status-dot" />
+          <span>IBKR live disabled</span>
+          <span>Paper gates required</span>
+        </div>
+      </header>
 
-      <div className="workflow-grid">
-        <TranscriptForm onSaved={setSelectedTranscript} />
-        <StrategyExtractionPanel
-          transcript={selectedTranscript}
-          initialCandidates={restoredStrategies}
-          onCandidateSelected={setSelectedStrategy}
-        />
+      <div className="terminal-layout">
+        <aside className="terminal-rail" aria-label="Workspace navigation">
+          <p className="rail-title">Research desk</p>
+          <a href="#research-flow">01 Intake → Strategy</a>
+          <a href="#market-workspace">02 Chart + Backtest</a>
+          <a href="#safety-gates">03 IBKR Safety Gates</a>
+          <a href="#audit-archive">04 Audit Archive</a>
+          <div className="rail-card">
+            <span>Mode</span>
+            <strong>Audit-first</strong>
+            <small>No broker side effects unless the paper submission gates pass.</small>
+          </div>
+        </aside>
+
+        <section className="terminal-main">
+          <section className="hero-panel">
+            <p className="eyebrow">Fintech terminal workspace</p>
+            <h2>Compact research cockpit</h2>
+            <p className="lede">
+              Extract strategy hypotheses from transcripts, validate them against OHLCV data, and
+              keep Interactive Brokers execution behind explicit paper-account safety controls.
+            </p>
+          </section>
+
+          {restoredTranscriptCount > 0 ? (
+            <p className="success">Restored {restoredTranscriptCount} saved transcript</p>
+          ) : null}
+
+          <section id="research-flow" className="workflow-grid" aria-label="Transcript and strategy workflow">
+            <TranscriptForm onSaved={setSelectedTranscript} />
+            <StrategyExtractionPanel
+              transcript={selectedTranscript}
+              initialCandidates={restoredStrategies}
+              onCandidateSelected={setSelectedStrategy}
+            />
+          </section>
+
+          <ChartsPage selectedStrategy={selectedStrategy} />
+
+          <section className="dashboard-grid" aria-label="Dashboard sections">
+            <article>
+              <h2>Transcripts</h2>
+              <p>Paste day-trader YouTube transcripts and keep source context attached.</p>
+            </article>
+            <article>
+              <h2>Strategy Builder</h2>
+              <p>Extract rules, indicators, entries, exits, stops, and invalidations.</p>
+            </article>
+            <article>
+              <h2>Charts</h2>
+              <p>KLineCharts Pro workspace planned for candlesticks, overlays, and trade markers.</p>
+            </article>
+            <article>
+              <h2>IBKR Paper Trading</h2>
+              <p>Interactive Brokers integration starts read-only and paper-only by default.</p>
+            </article>
+          </section>
+        </section>
       </div>
-
-      {restoredTranscriptCount > 0 ? (
-        <p className="success">Restored {restoredTranscriptCount} saved transcript</p>
-      ) : null}
-
-      <ChartsPage selectedStrategy={selectedStrategy} />
-
-      <section className="dashboard-grid" aria-label="Dashboard sections">
-        <article>
-          <h2>Transcripts</h2>
-          <p>Paste day-trader YouTube transcripts and keep source context attached.</p>
-        </article>
-        <article>
-          <h2>Strategy Builder</h2>
-          <p>Extract rules, indicators, entries, exits, stops, and invalidations.</p>
-        </article>
-        <article>
-          <h2>Charts</h2>
-          <p>KLineCharts Pro workspace planned for candlesticks, overlays, and trade markers.</p>
-        </article>
-        <article>
-          <h2>IBKR Paper Trading</h2>
-          <p>Interactive Brokers integration starts read-only and paper-only by default.</p>
-        </article>
-      </section>
     </main>
   );
 }

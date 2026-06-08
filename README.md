@@ -1,5 +1,7 @@
 # Day Trade Maker
 
+![X](https://img.shields.io/twitter/follow/gcampton)
+
 Day Trade Maker is a local-first research dashboard for turning day-trading YouTube transcripts into structured, testable strategy ideas.
 
 The first milestones are research, charting, backtesting, and Interactive Brokers paper-trading support. Live trading is intentionally out of scope until the strategy compiler, backtesting, risk controls, approvals, and audit trail are proven.
